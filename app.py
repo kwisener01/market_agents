@@ -4,8 +4,12 @@ import requests
 from ta.momentum import RSIIndicator
 import mplfinance as mpf
 import matplotlib.pyplot as plt
+import openai
 
-API_KEY = st.secrets["api_key"] if "api_key" in st.secrets else st.text_input("Enter Twelve Data API Key")
+API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
+OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
+openai.api_key = OPENAI_API_KEY
+
 SYMBOL = st.selectbox("Select Symbol", ["SPY", "QQQ", "AAPL", "TSLA"], index=0)
 INTERVAL = "1min"
 
@@ -41,12 +45,30 @@ def plot_chart(df):
     fig, _ = mpf.plot(plot_df, type='candle', style='charles', addplot=apds, volume=True, returnfig=True)
     return fig
 
-if API_KEY:
+def bayesian_forecast(df):
+    latest = df.iloc[-1]
+    context = f"Given the latest 1-minute data for {SYMBOL}, with RSI={latest['rsi']:.2f}, EMA20={latest['ema_20']:.2f}, and Close={latest['close']:.2f}, what is the likely short-term direction (up/down/hold) using a Bayesian-style reasoning?"
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a Bayesian financial forecasting assistant."},
+                {"role": "user", "content": context}
+            ]
+        )
+        return response.choices[0].message['content']
+    except Exception as e:
+        return f"Error in forecast: {e}"
+
+if API_KEY and OPENAI_API_KEY:
     data = fetch_data(SYMBOL, INTERVAL)
     if data is not None:
         signals = generate_signals(data)
         st.write("### Signal Data", signals.tail())
         fig = plot_chart(signals)
         st.pyplot(fig)
+        forecast = bayesian_forecast(signals)
+        st.write("### 🧠 Bayesian Forecast")
+        st.info(forecast)
         signals.to_csv("signals.csv")
         st.download_button("Download CSV", signals.to_csv().encode(), "signals.csv")
