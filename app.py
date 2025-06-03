@@ -70,8 +70,8 @@ def bayesian_forecast(df):
     except Exception as e:
         return f"Error in forecast: {e}"
 
-def market_intel_agent(df):
-    context = "Summarize any macro factors or technical observations that might affect current signals for the given symbol. Max 25 words."
+def market_intel_agent(df, symbol):
+    context = f"Summarize any macro factors or technical observations that might affect current signals for {symbol}. Max 25 words."
     try:
         response = client.chat.completions.create(
             model="gpt-4",
@@ -98,7 +98,7 @@ if API_KEY and OPENAI_API_KEY:
             st.info(forecast)
 
         if st.button("📡 Run Market Intel Agent"):
-            intel = market_intel_agent(signals)
+            intel = market_intel_agent(signals, SYMBOL)
             st.subheader("📊 Market Intel Agent")
             st.info(intel)
 
