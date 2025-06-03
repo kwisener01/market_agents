@@ -5,13 +5,22 @@ from ta.momentum import RSIIndicator
 import mplfinance as mpf
 import matplotlib.pyplot as plt
 import openai
+from openai import OpenAI
+from streamlit_autorefresh import st_autorefresh
 
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
-openai.api_key = OPENAI_API_KEY
+
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 SYMBOL = st.selectbox("Select Symbol", ["SPY", "QQQ", "AAPL", "TSLA"], index=0)
 INTERVAL = "1min"
+
+refresh_rate = st.selectbox("⏱️ Auto-Refresh Interval", ["Do not refresh", "1 min", "2 min", "5 min"], index=1)
+interval_mapping = {"Do not refresh": 0, "1 min": 60 * 1000, "2 min": 120 * 1000, "5 min": 300 * 1000}
+interval_ms = interval_mapping[refresh_rate]
+if interval_ms:
+    st_autorefresh(interval=interval_ms, key="data_refresh")
 
 @st.cache_data(ttl=60)
 def fetch_data(symbol, interval):
@@ -49,14 +58,14 @@ def bayesian_forecast(df):
     latest = df.iloc[-1]
     context = f"Given the latest 1-minute data for {SYMBOL}, with RSI={latest['rsi']:.2f}, EMA20={latest['ema_20']:.2f}, and Close={latest['close']:.2f}, what is the likely short-term direction (up/down/hold) using a Bayesian-style reasoning?"
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a Bayesian financial forecasting assistant."},
                 {"role": "user", "content": context}
             ]
         )
-        return response.choices[0].message['content']
+        return response.choices[0].message.content
     except Exception as e:
         return f"Error in forecast: {e}"
 
