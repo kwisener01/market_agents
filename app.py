@@ -73,8 +73,16 @@ if API_KEY and OPENAI_API_KEY:
         st.write("### Signal Data", signals.tail())
         fig = plot_chart(signals)
         st.pyplot(fig)
-        forecast = bayesian_forecast(signals)
-        st.write("### 🧠 Bayesian Forecast")
-        st.info(forecast)
+
+        if st.button("🔮 Run Bayesian Forecast Agent"):
+            forecast = bayesian_forecast(signals)
+            st.subheader("🧠 Bayesian Forecast")
+            st.info(forecast)
+
+        # Potential secondary agent (idea only)
+        st.markdown("---")
+        st.subheader("📊 Market Intel Agent (Concept)")
+        st.caption("A second agent could analyze macro news, volume surges, or tweet sentiment to validate or challenge Bayesian predictions.")
+
         signals.to_csv("signals.csv")
         st.download_button("Download CSV", signals.to_csv().encode(), "signals.csv")
