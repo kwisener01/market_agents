@@ -7,11 +7,8 @@ import matplotlib.pyplot as plt
 import openai
 
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
-#OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
+OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
 openai.api_key = OPENAI_API_KEY
-
-client = openai.OpenAI(api_key=st.secrets["OPENAI"]["API_KEY"])
-
 
 SYMBOL = st.selectbox("Select Symbol", ["SPY", "QQQ", "AAPL", "TSLA"], index=0)
 INTERVAL = "1min"
@@ -50,20 +47,18 @@ def plot_chart(df):
 
 def bayesian_forecast(df):
     latest = df.iloc[-1]
-    prompt = f"Given the latest 1-minute data for {SYMBOL}, with RSI={latest['rsi']:.2f}, EMA20={latest['ema_20']:.2f}, and Close={latest['close']:.2f}, what is the likely short-term direction (up/down/hold) using a Bayesian-style reasoning?"
-            response = client.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}]
-            )
-
-        
-
-            bayesian_analysis = response.choices[0].message.content
-            st.subheader("bayesian_analysis")
-            st.write(bayesian_analysis)
-
-        
+    context = f"Given the latest 1-minute data for {SYMBOL}, with RSI={latest['rsi']:.2f}, EMA20={latest['ema_20']:.2f}, and Close={latest['close']:.2f}, what is the likely short-term direction (up/down/hold) using a Bayesian-style reasoning?"
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a Bayesian financial forecasting assistant."},
+                {"role": "user", "content": context}
+            ]
+        )
         return response.choices[0].message['content']
+    except Exception as e:
+        return f"Error in forecast: {e}"
 
 if API_KEY and OPENAI_API_KEY:
     data = fetch_data(SYMBOL, INTERVAL)
