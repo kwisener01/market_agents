@@ -6,6 +6,7 @@ import mplfinance as mpf
 import matplotlib.pyplot as plt
 import openai
 from openai import OpenAI
+from streamlit_autorefresh import st_autorefresh
 
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
@@ -18,6 +19,9 @@ INTERVAL = "1min"
 refresh_rate = st.selectbox("⏱️ Auto-Refresh Interval", ["Do not refresh", "1 min", "2 min", "5 min"], index=1)
 interval_mapping = {"Do not refresh": 0, "1 min": 60 * 1000, "2 min": 120 * 1000, "5 min": 300 * 1000}
 interval_ms = interval_mapping[refresh_rate]
+
+if interval_ms > 0:
+    st_autorefresh(interval=interval_ms, key="autorefresh")
 
 @st.cache_data(ttl=60)
 def fetch_data(symbol, interval):
@@ -66,6 +70,20 @@ def bayesian_forecast(df):
     except Exception as e:
         return f"Error in forecast: {e}"
 
+def market_intel_agent(df):
+    context = "Summarize any macro factors or technical observations that might affect current signals for the given symbol. Max 25 words."
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a market analyst. Respond concisely (max 25 words)."},
+                {"role": "user", "content": context}
+            ]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Error in market analysis: {e}"
+
 if API_KEY and OPENAI_API_KEY:
     data = fetch_data(SYMBOL, INTERVAL)
     if data is not None:
@@ -79,10 +97,10 @@ if API_KEY and OPENAI_API_KEY:
             st.subheader("🧠 Bayesian Forecast")
             st.info(forecast)
 
-        # Potential secondary agent (idea only)
-        st.markdown("---")
-        st.subheader("📊 Market Intel Agent (Concept)")
-        st.caption("A second agent could analyze macro news, volume surges, or tweet sentiment to validate or challenge Bayesian predictions.")
+        if st.button("📡 Run Market Intel Agent"):
+            intel = market_intel_agent(signals)
+            st.subheader("📊 Market Intel Agent")
+            st.info(intel)
 
         signals.to_csv("signals.csv")
         st.download_button("Download CSV", signals.to_csv().encode(), "signals.csv")
