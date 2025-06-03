@@ -53,12 +53,12 @@ def plot_chart(df):
 
 def bayesian_forecast(df):
     latest = df.iloc[-1]
-    context = f"Given the latest 1-minute data for {SYMBOL}, with RSI={latest['rsi']:.2f}, EMA20={latest['ema_20']:.2f}, and Close={latest['close']:.2f}, what is the likely short-term direction (up/down/hold) using a Bayesian-style reasoning?"
+    context = f"Given RSI={latest['rsi']:.2f}, EMA20={latest['ema_20']:.2f}, and Close={latest['close']:.2f}, return a one-word forecast: Buy, Sell, or Hold. Then explain in <25 words."
     try:
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are a Bayesian financial forecasting assistant."},
+                {"role": "system", "content": "Be concise. Only return: Buy, Sell, or Hold with <25-word explanation."},
                 {"role": "user", "content": context}
             ]
         )
