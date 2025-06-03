@@ -6,7 +6,9 @@ import mplfinance as mpf
 import matplotlib.pyplot as plt
 import openai
 from openai import OpenAI
-from streamlit_autorefresh import st_autorefresh
+
+# Remove this import if streamlit_autorefresh is not installed
+# from streamlit_autorefresh import st_autorefresh
 
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
@@ -19,8 +21,8 @@ INTERVAL = "1min"
 refresh_rate = st.selectbox("⏱️ Auto-Refresh Interval", ["Do not refresh", "1 min", "2 min", "5 min"], index=1)
 interval_mapping = {"Do not refresh": 0, "1 min": 60 * 1000, "2 min": 120 * 1000, "5 min": 300 * 1000}
 interval_ms = interval_mapping[refresh_rate]
-if interval_ms:
-    st_autorefresh(interval=interval_ms, key="data_refresh")
+#if interval_ms:
+#    st_autorefresh(interval=interval_ms, key="data_refresh")
 
 @st.cache_data(ttl=60)
 def fetch_data(symbol, interval):
