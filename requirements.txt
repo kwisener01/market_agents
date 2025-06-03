@@ -4,3 +4,4 @@ requests
 mplfinance
 ta
 openai
+streamlit-autorefresh
