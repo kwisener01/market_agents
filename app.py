@@ -73,50 +73,26 @@ def train_predictive_model(df):
     joblib.dump(model, "model.pkl")
     return model
 
-def bayesian_forecast(df):
-    latest = df.iloc[-1]
-    context = f"Given RSI={latest['rsi']:.2f}, EMA20={latest['ema_20']:.2f}, and Close={latest['close']:.2f}, return a one-word forecast: Buy, Sell, or Hold. Then explain in <25 words."
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Be concise. Only return: Buy, Sell, or Hold with <25-word explanation."},
-                {"role": "user", "content": context}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Error in forecast: {e}"
+def load_model():
+    if os.path.exists("model.pkl"):
+        return joblib.load("model.pkl")
+    return None
 
-def market_intel_agent(df, symbol):
-    context = f"Summarize any macro factors or technical observations that might affect current signals for {symbol}. Max 25 words."
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a market analyst. Respond concisely (max 25 words)."},
-                {"role": "user", "content": context}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Error in market analysis: {e}"
+def predict_live(df, model):
+    df = df.copy()
+    df['price_change'] = df['close'].pct_change()
+    df['volatility'] = df['close'].rolling(window=10).std()
+    df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
+    features = ["rsi", "ema_20", "price_change", "volatility", "volume_surge"]
+    df = df.dropna()
+    if not df.empty:
+        X_pred = df[features].tail(1)
+        if not X_pred.isnull().any().any():
+            pred = model.predict(X_pred)[0]
+            return pred, df['close'].iloc[-1]
+    return None, None
 
-def ml_insight_agent(df):
-    sample = df.iloc[-1]
-    context = f"Using these indicators: RSI={sample['rsi']:.2f}, EMA20={sample['ema_20']:.2f}, Volume={sample['volume']}, close={sample['close']}, suggest new predictive features to improve a Buy/Sell/Hold model."
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a machine learning researcher helping improve a trading model. Respond with 1-3 new predictive features."},
-                {"role": "user", "content": context}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Error in ML agent: {e}"
-
+# Run main logic
 if API_KEY and OPENAI_API_KEY:
     data = fetch_data(SYMBOL, INTERVAL)
     if data is not None:
@@ -124,6 +100,14 @@ if API_KEY and OPENAI_API_KEY:
         st.write("### Signal Data", signals.tail())
         fig = plot_chart(signals)
         st.pyplot(fig)
+
+        model = load_model()
+        if model is not None:
+            pred, price = predict_live(signals, model)
+            if pred and price:
+                st.subheader("📍 Live ML Signal")
+                st.metric("Prediction", pred)
+                st.metric("Price", f"${price:.2f}")
 
         if st.button("🔮 Run Bayesian Forecast Agent"):
             forecast = bayesian_forecast(signals)
@@ -145,28 +129,11 @@ if API_KEY and OPENAI_API_KEY:
             st.session_state.model = model
             st.success("✅ Model trained and saved.")
 
-            # Predict on latest row
-            features = ["rsi", "ema_20", "price_change", "volatility", "volume_surge"]
-            latest = signals.copy().dropna().iloc[-11:].copy()
-            latest['price_change'] = latest['close'].pct_change()
-            latest['volatility'] = latest['close'].rolling(window=10).std()
-            latest['volume_surge'] = latest['volume'] / latest['volume'].rolling(10).mean()
-            latest = latest.dropna()
-
-            if not latest.empty:
-                X_pred = latest[features].tail(1)
-                if X_pred.isnull().any().any():
-                    st.warning("⚠️ Incomplete data for prediction (NaNs detected).")
-                else:
-                    pred = model.predict(X_pred)[0]
-                    st.subheader("📍 ML Model Signal")
-                    st.metric("Prediction", pred)
-
         signals.to_csv("signals.csv")
         st.download_button("Download CSV", signals.to_csv().encode(), "signals.csv")
 
         if os.path.isdir(".git"):
             with open("signals.csv", "rb") as f:
                 git_command = "git add signals.csv && git commit -m 'Auto update signals' && git push"
-                st.caption(f"📡 Signals saved. Use this git command:")
+                st.caption("📡 Signals saved. Use this git command:")
                 st.code(git_command)
