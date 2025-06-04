@@ -12,6 +12,7 @@ import os
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
+import yfinance as yf
 
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
@@ -93,6 +94,26 @@ def predict_live(df, model):
             return pred, df['close'].iloc[-1], proba, X_pred
     return None, None, None, None
 
+def backtest_model(df):
+    st.subheader("📈 Backtest Model on Fetched Data")
+    df = df.copy().dropna()
+    df['Label'] = df['signal'].map({1: "Buy", -1: "Sell", 0: "Hold"})
+    df['price_change'] = df['close'].pct_change()
+    df['volatility'] = df['close'].rolling(window=10).std()
+    df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
+    features = ["rsi", "ema_20", "price_change", "volatility", "volume_surge"]
+    df = df.dropna(subset=features + ['Label'])
+    X = df[features]
+    y = df['Label']
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    st.text("Classification Report:")
+    st.text(classification_report(y_test, y_pred))
+    st.text("Confusion Matrix:")
+    st.text(confusion_matrix(y_test, y_pred))
+
 # Run main logic
 if API_KEY and OPENAI_API_KEY:
     data = fetch_data(SYMBOL, INTERVAL)
@@ -132,6 +153,16 @@ if API_KEY and OPENAI_API_KEY:
             model = train_predictive_model(signals)
             st.session_state.model = model
             st.success("✅ Model trained and saved.")
+
+        if st.button("📈 Backtest Current Features"):
+            backtest_model(signals)
+
+        st.write("### ℹ️ Yahoo Info")
+        try:
+            info_df = yf.Ticker(SYMBOL).history(period="5d")
+            st.dataframe(info_df.tail())
+        except Exception as e:
+            st.warning(f"Yahoo Finance info error: {e}")
 
         signals.to_csv("signals.csv")
         st.download_button("Download CSV", signals.to_csv().encode(), "signals.csv")
