@@ -114,6 +114,15 @@ def backtest_model(df):
     st.text("Confusion Matrix:")
     st.text(confusion_matrix(y_test, y_pred))
 
+def display_yahoo_info():
+    st.subheader("📊 Yahoo Finance Info")
+    period_choice = st.selectbox("Select Yahoo Data Period", ["1d", "5d", "7d"], index=1)
+    try:
+        info_df = yf.Ticker(SYMBOL).history(period=period_choice)
+        st.dataframe(info_df.tail())
+    except Exception as e:
+        st.warning(f"Yahoo Finance info error: {e}")
+
 # Run main logic
 if API_KEY and OPENAI_API_KEY:
     data = fetch_data(SYMBOL, INTERVAL)
@@ -157,12 +166,7 @@ if API_KEY and OPENAI_API_KEY:
         if st.button("📈 Backtest Current Features"):
             backtest_model(signals)
 
-        st.write("### ℹ️ Yahoo Info")
-        try:
-            info_df = yf.Ticker(SYMBOL).history(period="5d")
-            st.dataframe(info_df.tail())
-        except Exception as e:
-            st.warning(f"Yahoo Finance info error: {e}")
+        display_yahoo_info()
 
         signals.to_csv("signals.csv")
         st.download_button("Download CSV", signals.to_csv().encode(), "signals.csv")
