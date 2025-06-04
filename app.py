@@ -123,6 +123,22 @@ def display_yahoo_info():
     except Exception as e:
         st.warning(f"Yahoo Finance info error: {e}")
 
+def bayesian_forecast_agent(features):
+    prompt = f"Using RSI={features['rsi'].values[0]:.2f}, EMA20={features['ema_20'].values[0]:.2f}, volatility={features['volatility'].values[0]:.4f}, and volume surge={features['volume_surge'].values[0]:.2f}, what is the likely short-term market move (Buy/Sell/Hold)? Give the result and reason in less than 25 words."
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content
+
+def macro_analyst_agent(symbol):
+    prompt = f"Based on recent macroeconomic factors and general trends, what key external signals might affect {symbol}'s short-term price direction today?"
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content
+
 # Run main logic
 if API_KEY and OPENAI_API_KEY:
     data = fetch_data(SYMBOL, INTERVAL)
@@ -142,6 +158,14 @@ if API_KEY and OPENAI_API_KEY:
                 st.metric("Confidence", f"{max(proba)*100:.2f}%")
                 st.write("### Features Used for Prediction")
                 st.dataframe(features_used)
+
+                if st.button("📊 Run Bayesian Forecast Agent"):
+                    bayes_output = bayesian_forecast_agent(features_used)
+                    st.success(f"🧠 Bayesian Agent: {bayes_output}")
+
+                if st.button("🌐 Run Macro Analyst Agent"):
+                    macro_output = macro_analyst_agent(SYMBOL)
+                    st.success(f"🌍 Macro Analyst: {macro_output}")
 
         if st.button("🚀 Train Predictive Model with Suggested Features"):
             model = train_predictive_model(signals)
