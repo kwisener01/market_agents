@@ -5,3 +5,4 @@ mplfinance
 ta
 openai
 streamlit-autorefresh
+joblib
