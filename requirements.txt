@@ -6,3 +6,4 @@ ta
 openai
 streamlit-autorefresh
 joblib
+RandomForestClassifier
