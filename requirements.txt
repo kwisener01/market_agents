@@ -6,4 +6,4 @@ ta
 openai
 streamlit-autorefresh
 joblib
-RandomForestClassifier
+scikit-learn>=1.3
