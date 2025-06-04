@@ -89,8 +89,9 @@ def predict_live(df, model):
         X_pred = df[features].tail(1)
         if not X_pred.isnull().any().any():
             pred = model.predict(X_pred)[0]
-            return pred, df['close'].iloc[-1]
-    return None, None
+            proba = model.predict_proba(X_pred)[0]
+            return pred, df['close'].iloc[-1], proba, X_pred
+    return None, None, None, None
 
 # Run main logic
 if API_KEY and OPENAI_API_KEY:
@@ -103,11 +104,14 @@ if API_KEY and OPENAI_API_KEY:
 
         model = load_model()
         if model is not None:
-            pred, price = predict_live(signals, model)
+            pred, price, proba, features_used = predict_live(signals, model)
             if pred and price:
                 st.subheader("📍 Live ML Signal")
                 st.metric("Prediction", pred)
                 st.metric("Price", f"${price:.2f}")
+                st.metric("Confidence", f"{max(proba)*100:.2f}%")
+                st.write("### Features Used for Prediction")
+                st.dataframe(features_used)
 
         if st.button("🔮 Run Bayesian Forecast Agent"):
             forecast = bayesian_forecast(signals)
