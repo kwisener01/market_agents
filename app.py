@@ -9,6 +9,9 @@ from openai import OpenAI
 from streamlit_autorefresh import st_autorefresh
 import joblib
 import os
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix
 
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
@@ -54,6 +57,21 @@ def plot_chart(df):
     ]
     fig, _ = mpf.plot(plot_df, type='candle', style='charles', addplot=apds, volume=True, returnfig=True)
     return fig
+
+def train_predictive_model(df):
+    df = df.dropna()
+    df['Label'] = df['signal'].map({1: "Buy", -1: "Sell", 0: "Hold"})
+    df['price_change'] = df['close'].pct_change()
+    df['volatility'] = df['close'].rolling(window=10).std()
+    df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
+    features = ["rsi", "ema_20", "price_change", "volatility", "volume_surge"]
+    df = df.dropna(subset=features + ['Label'])
+    X = df[features]
+    y = df['Label']
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X, y)
+    joblib.dump(model, "model.pkl")
+    return model
 
 def bayesian_forecast(df):
     latest = df.iloc[-1]
@@ -121,6 +139,24 @@ if API_KEY and OPENAI_API_KEY:
             insight = ml_insight_agent(signals)
             st.subheader("🧠 ML Agent Insights")
             st.info(insight)
+
+        if st.button("🚀 Train Predictive Model with Suggested Features"):
+            model = train_predictive_model(signals)
+            st.session_state.model = model
+            st.success("✅ Model trained and saved.")
+
+            # Predict on latest row
+            features = ["rsi", "ema_20", "price_change", "volatility", "volume_surge"]
+            latest = signals.dropna().iloc[-1:]
+            if not latest.empty:
+                latest['price_change'] = latest['close'].pct_change()
+                latest['volatility'] = latest['close'].rolling(window=10).std()
+                latest['volume_surge'] = latest['volume'] / latest['volume'].rolling(10).mean()
+                latest = latest.dropna()
+                X_pred = latest[features]
+                pred = model.predict(X_pred)[0]
+                st.subheader("📍 ML Model Signal")
+                st.metric("Prediction", pred)
 
         signals.to_csv("signals.csv")
         st.download_button("Download CSV", signals.to_csv().encode(), "signals.csv")
