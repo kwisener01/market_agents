@@ -7,10 +7,11 @@ import matplotlib.pyplot as plt
 import openai
 from openai import OpenAI
 from streamlit_autorefresh import st_autorefresh
+import joblib
+import os
 
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
-
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 SYMBOL = st.selectbox("Select Symbol", ["SPY", "QQQ", "AAPL", "TSLA"], index=0)
@@ -19,7 +20,6 @@ INTERVAL = "1min"
 refresh_rate = st.selectbox("⏱️ Auto-Refresh Interval", ["Do not refresh", "1 min", "2 min", "5 min"], index=1)
 interval_mapping = {"Do not refresh": 0, "1 min": 60 * 1000, "2 min": 120 * 1000, "5 min": 300 * 1000}
 interval_ms = interval_mapping[refresh_rate]
-
 if interval_ms > 0:
     st_autorefresh(interval=interval_ms, key="autorefresh")
 
@@ -84,6 +84,21 @@ def market_intel_agent(df, symbol):
     except Exception as e:
         return f"Error in market analysis: {e}"
 
+def ml_insight_agent(df):
+    sample = df.iloc[-1]
+    context = f"Using these indicators: RSI={sample['rsi']:.2f}, EMA20={sample['ema_20']:.2f}, Volume={sample['volume']}, close={sample['close']}, suggest new predictive features to improve a Buy/Sell/Hold model."
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a machine learning researcher helping improve a trading model. Respond with 1-3 new predictive features."},
+                {"role": "user", "content": context}
+            ]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Error in ML agent: {e}"
+
 if API_KEY and OPENAI_API_KEY:
     data = fetch_data(SYMBOL, INTERVAL)
     if data is not None:
@@ -102,5 +117,16 @@ if API_KEY and OPENAI_API_KEY:
             st.subheader("📊 Market Intel Agent")
             st.info(intel)
 
+        if st.button("🤖 Run ML Insight Agent"):
+            insight = ml_insight_agent(signals)
+            st.subheader("🧠 ML Agent Insights")
+            st.info(insight)
+
         signals.to_csv("signals.csv")
         st.download_button("Download CSV", signals.to_csv().encode(), "signals.csv")
+
+        if os.path.isdir(".git"):
+            with open("signals.csv", "rb") as f:
+                git_command = "git add signals.csv && git commit -m 'Auto update signals' && git push"
+                st.caption(f"📡 Signals saved. Use this git command:")
+                st.code(git_command)
