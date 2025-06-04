@@ -143,21 +143,6 @@ if API_KEY and OPENAI_API_KEY:
                 st.write("### Features Used for Prediction")
                 st.dataframe(features_used)
 
-        if st.button("🔮 Run Bayesian Forecast Agent"):
-            forecast = bayesian_forecast(signals)
-            st.subheader("🧠 Bayesian Forecast")
-            st.info(forecast)
-
-        if st.button("📡 Run Market Intel Agent"):
-            intel = market_intel_agent(signals, SYMBOL)
-            st.subheader("📊 Market Intel Agent")
-            st.info(intel)
-
-        if st.button("🤖 Run ML Insight Agent"):
-            insight = ml_insight_agent(signals)
-            st.subheader("🧠 ML Agent Insights")
-            st.info(insight)
-
         if st.button("🚀 Train Predictive Model with Suggested Features"):
             model = train_predictive_model(signals)
             st.session_state.model = model
