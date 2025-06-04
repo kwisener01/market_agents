@@ -147,16 +147,20 @@ if API_KEY and OPENAI_API_KEY:
 
             # Predict on latest row
             features = ["rsi", "ema_20", "price_change", "volatility", "volume_surge"]
-            latest = signals.dropna().iloc[-1:]
+            latest = signals.copy().dropna().iloc[-11:].copy()
+            latest['price_change'] = latest['close'].pct_change()
+            latest['volatility'] = latest['close'].rolling(window=10).std()
+            latest['volume_surge'] = latest['volume'] / latest['volume'].rolling(10).mean()
+            latest = latest.dropna()
+
             if not latest.empty:
-                latest['price_change'] = latest['close'].pct_change()
-                latest['volatility'] = latest['close'].rolling(window=10).std()
-                latest['volume_surge'] = latest['volume'] / latest['volume'].rolling(10).mean()
-                latest = latest.dropna()
-                X_pred = latest[features]
-                pred = model.predict(X_pred)[0]
-                st.subheader("📍 ML Model Signal")
-                st.metric("Prediction", pred)
+                X_pred = latest[features].tail(1)
+                if X_pred.isnull().any().any():
+                    st.warning("⚠️ Incomplete data for prediction (NaNs detected).")
+                else:
+                    pred = model.predict(X_pred)[0]
+                    st.subheader("📍 ML Model Signal")
+                    st.metric("Prediction", pred)
 
         signals.to_csv("signals.csv")
         st.download_button("Download CSV", signals.to_csv().encode(), "signals.csv")
