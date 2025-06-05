@@ -13,6 +13,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
 import yfinance as yf
+import pytz
+from datetime import datetime
 
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI"]["API_KEY"]
@@ -79,6 +81,15 @@ def train_predictive_model(df):
     shared_memory['model'] = model
     return model
 
+def predict_current(df):
+    if 'model' not in shared_memory:
+        return None
+    features = shared_memory['features']
+    latest = df.iloc[-1:][features]
+    pred = shared_memory['model'].predict(latest)[0]
+    proba = shared_memory['model'].predict_proba(latest)[0].max()
+    return pred, proba
+
 def ml_insight_agent():
     insight = "Consider adding MACD, Bollinger Bands, and VWAP for richer feature context. Check regime change detection using clustering."
     shared_memory['ml_insight'] = insight
@@ -95,7 +106,35 @@ def manager_agent():
               f"Market Summary: {shared_memory.get('market_summary', '')}"
     return summary
 
-# UI Controls for agents
+# Load data and update live chart and predictions
+st.header("📈 Live Market Dashboard")
+data = fetch_data(SYMBOL, INTERVAL)
+if data is not None:
+    signals = generate_signals(data)
+    fig = plot_chart(signals)
+    st.pyplot(fig)
+    model = train_predictive_model(signals)
+
+    pred_result = predict_current(signals)
+    if pred_result:
+        pred, conf = pred_result
+        price = signals['close'].iloc[-1]
+        now_est = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d %I:%M:%S %p")
+        st.subheader(f"🕒 Time: {now_est}")
+        st.metric("📊 Prediction", pred)
+        st.metric("📈 Confidence", f"{conf:.2%}")
+        st.metric("💵 Current Price", f"${price:.2f}")
+
+        if pred == "Hold":
+            desc = "Sideways market conditions. Better to wait."
+        elif pred == "Buy":
+            desc = "Momentum and volume support a potential up move."
+        else:
+            desc = "Indicators suggest a pullback risk."
+        st.info(f"📉 Market Condition: {desc}")
+
+# Agent Controls
+st.header("🤖 Agent Insights")
 if st.button("Run ML Insight Agent"):
     st.info(ml_insight_agent())
     st.info(market_agent())
