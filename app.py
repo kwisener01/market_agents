@@ -4,6 +4,7 @@ import requests
 from ta.momentum import RSIIndicator
 from ta.trend import MACD
 from ta.volatility import BollingerBands
+from ta.volume import VolumeWeightedAveragePrice
 import mplfinance as mpf
 import matplotlib.pyplot as plt
 import openai
@@ -55,6 +56,8 @@ def generate_signals(df):
     bb = BollingerBands(df['close'])
     df['bb_upper'] = bb.bollinger_hband()
     df['bb_lower'] = bb.bollinger_lband()
+    vwap = VolumeWeightedAveragePrice(df['high'], df['low'], df['close'], df['volume'])
+    df['vwap'] = vwap.volume_weighted_average_price()
     df['signal'] = 0
     df.loc[(df['rsi'] < 30) & (df['close'] > df['ema_20']), 'signal'] = 1
     df.loc[(df['rsi'] > 70) & (df['close'] < df['ema_20']), 'signal'] = -1
@@ -78,7 +81,7 @@ def train_predictive_model(df):
     df['price_change'] = df['close'].pct_change()
     df['volatility'] = df['close'].rolling(window=10).std()
     df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
-    features = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "price_change", "volatility", "volume_surge"]
+    features = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "vwap", "price_change", "volatility", "volume_surge"]
     df = df.dropna(subset=features + ['Label'])
     df = df.copy()
     X = df[features]
@@ -92,6 +95,7 @@ def train_predictive_model(df):
     shared_memory['features'] = features
     shared_memory['model'] = model
     shared_memory['last_df'] = df
+    df.to_csv("prediction_history.csv")
     return model
 
 def predict_current(df):
@@ -107,7 +111,7 @@ def predict_current(df):
         return None
 
 def ml_insight_agent():
-    insight = "Consider adding MACD, Bollinger Bands, and VWAP for richer feature context. Check regime change detection using clustering."
+    insight = "Added VWAP for richer market signal. Recommend exploring clustering for regime shifts and combining with news sentiment."
     shared_memory['ml_insight'] = insight
     return insight
 
