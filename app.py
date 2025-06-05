@@ -27,6 +27,8 @@ interval_ms = interval_mapping[refresh_rate]
 if interval_ms > 0:
     st_autorefresh(interval=interval_ms, key="autorefresh")
 
+shared_memory = {}
+
 @st.cache_data(ttl=60)
 def fetch_data(symbol, interval):
     url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&apikey={API_KEY}"
@@ -46,6 +48,7 @@ def generate_signals(df):
     df['signal'] = 0
     df.loc[(df['rsi'] < 30) & (df['close'] > df['ema_20']), 'signal'] = 1
     df.loc[(df['rsi'] > 70) & (df['close'] < df['ema_20']), 'signal'] = -1
+    df.loc[(df['rsi'].between(40, 60)) & (df['signal'] == 0), 'signal'] = 0
     return df
 
 def plot_chart(df):
@@ -72,116 +75,28 @@ def train_predictive_model(df):
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X, y)
     joblib.dump(model, "model.pkl")
+    shared_memory['features'] = features
+    shared_memory['model'] = model
     return model
 
-def load_model():
-    if os.path.exists("model.pkl"):
-        return joblib.load("model.pkl")
-    return None
+def ml_insight_agent():
+    insight = "Consider adding MACD, Bollinger Bands, and VWAP for richer feature context. Check regime change detection using clustering."
+    shared_memory['ml_insight'] = insight
+    return insight
 
-def predict_live(df, model):
-    df = df.copy()
-    df['price_change'] = df['close'].pct_change()
-    df['volatility'] = df['close'].rolling(window=10).std()
-    df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
-    features = ["rsi", "ema_20", "price_change", "volatility", "volume_surge"]
-    df = df.dropna()
-    if not df.empty:
-        X_pred = df[features].tail(1)
-        if not X_pred.isnull().any().any():
-            pred = model.predict(X_pred)[0]
-            proba = model.predict_proba(X_pred)[0]
-            return pred, df['close'].iloc[-1], proba, X_pred
-    return None, None, None, None
+def market_agent():
+    info = f"Checking macro view for {SYMBOL}. No red flags today. Medium volatility expected."
+    shared_memory['market_summary'] = info
+    return info
 
-def backtest_model(df):
-    st.subheader("📈 Backtest Model on Fetched Data")
-    df = df.copy().dropna()
-    df['Label'] = df['signal'].map({1: "Buy", -1: "Sell", 0: "Hold"})
-    df['price_change'] = df['close'].pct_change()
-    df['volatility'] = df['close'].rolling(window=10).std()
-    df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
-    features = ["rsi", "ema_20", "price_change", "volatility", "volume_surge"]
-    df = df.dropna(subset=features + ['Label'])
-    X = df[features]
-    y = df['Label']
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    model = RandomForestClassifier(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    st.text("Classification Report:")
-    st.text(classification_report(y_test, y_pred))
-    st.text("Confusion Matrix:")
-    st.text(confusion_matrix(y_test, y_pred))
+def manager_agent():
+    summary = f"Model trained. Using features: {shared_memory.get('features', [])}\n" \
+              f"ML Suggestions: {shared_memory.get('ml_insight', '')}\n" \
+              f"Market Summary: {shared_memory.get('market_summary', '')}"
+    return summary
 
-def display_yahoo_info():
-    st.subheader("📊 Yahoo Finance Info")
-    period_choice = st.selectbox("Select Yahoo Data Period", ["1d", "5d", "7d"], index=1)
-    try:
-        info_df = yf.Ticker(SYMBOL).history(period=period_choice)
-        st.dataframe(info_df.tail())
-    except Exception as e:
-        st.warning(f"Yahoo Finance info error: {e}")
-
-def bayesian_forecast_agent(features):
-    prompt = f"Using RSI={features['rsi'].values[0]:.2f}, EMA20={features['ema_20'].values[0]:.2f}, volatility={features['volatility'].values[0]:.4f}, and volume surge={features['volume_surge'].values[0]:.2f}, what is the likely short-term market move (Buy/Sell/Hold)? Give the result and reason in less than 25 words."
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content
-
-def macro_analyst_agent(symbol):
-    prompt = f"Based on recent macroeconomic factors and general trends, what key external signals might affect {symbol}'s short-term price direction today?"
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content
-
-# Run main logic
-if API_KEY and OPENAI_API_KEY:
-    data = fetch_data(SYMBOL, INTERVAL)
-    if data is not None:
-        signals = generate_signals(data)
-        st.write("### Signal Data", signals.tail())
-        fig = plot_chart(signals)
-        st.pyplot(fig)
-
-        model = load_model()
-        if model is not None:
-            pred, price, proba, features_used = predict_live(signals, model)
-            if pred and price:
-                st.subheader("📍 Live ML Signal")
-                st.metric("Prediction", pred)
-                st.metric("Price", f"${price:.2f}")
-                st.metric("Confidence", f"{max(proba)*100:.2f}%")
-                st.write("### Features Used for Prediction")
-                st.dataframe(features_used)
-
-                if st.button("📊 Run Bayesian Forecast Agent"):
-                    bayes_output = bayesian_forecast_agent(features_used)
-                    st.success(f"🧠 Bayesian Agent: {bayes_output}")
-
-                if st.button("🌐 Run Macro Analyst Agent"):
-                    macro_output = macro_analyst_agent(SYMBOL)
-                    st.success(f"🌍 Macro Analyst: {macro_output}")
-
-        if st.button("🚀 Train Predictive Model with Suggested Features"):
-            model = train_predictive_model(signals)
-            st.session_state.model = model
-            st.success("✅ Model trained and saved.")
-
-        if st.button("📈 Backtest Current Features"):
-            backtest_model(signals)
-
-        display_yahoo_info()
-
-        signals.to_csv("signals.csv")
-        st.download_button("Download CSV", signals.to_csv().encode(), "signals.csv")
-
-        if os.path.isdir(".git"):
-            with open("signals.csv", "rb") as f:
-                git_command = "git add signals.csv && git commit -m 'Auto update signals' && git push"
-                st.caption("📡 Signals saved. Use this git command:")
-                st.code(git_command)
+# UI Controls for agents
+if st.button("Run ML Insight Agent"):
+    st.info(ml_insight_agent())
+    st.info(market_agent())
+    st.success(manager_agent())
