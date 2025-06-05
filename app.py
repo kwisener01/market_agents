@@ -83,7 +83,9 @@ def train_predictive_model(df):
     df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
     features = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "vwap", "price_change", "volatility", "volume_surge"]
     df = df.dropna(subset=features + ['Label'])
-    df = df.copy()
+    if df.empty:
+        st.warning("⚠️ No valid training data available after preprocessing.")
+        return None
     X = df[features]
     y = df['Label']
     if len(X) != len(y):
@@ -103,7 +105,9 @@ def predict_current(df):
         return None
     features = shared_memory['features']
     try:
-        latest = df[features].iloc[-1:]
+        latest = df[features].dropna().iloc[-1:]
+        if latest.empty:
+            return None
         pred = shared_memory['model'].predict(latest)[0]
         proba = shared_memory['model'].predict_proba(latest)[0].max()
         return pred, proba
