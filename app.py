@@ -79,16 +79,20 @@ def train_predictive_model(df):
     joblib.dump(model, "model.pkl")
     shared_memory['features'] = features
     shared_memory['model'] = model
+    shared_memory['last_df'] = df  # store entire feature data
     return model
 
 def predict_current(df):
     if 'model' not in shared_memory:
         return None
     features = shared_memory['features']
-    latest = df.iloc[-1:][features]
-    pred = shared_memory['model'].predict(latest)[0]
-    proba = shared_memory['model'].predict_proba(latest)[0].max()
-    return pred, proba
+    try:
+        latest = df[features].iloc[-1:]
+        pred = shared_memory['model'].predict(latest)[0]
+        proba = shared_memory['model'].predict_proba(latest)[0].max()
+        return pred, proba
+    except KeyError:
+        return None
 
 def ml_insight_agent():
     insight = "Consider adding MACD, Bollinger Bands, and VWAP for richer feature context. Check regime change detection using clustering."
