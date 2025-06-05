@@ -80,8 +80,12 @@ def train_predictive_model(df):
     df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
     features = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "price_change", "volatility", "volume_surge"]
     df = df.dropna(subset=features + ['Label'])
+    df = df.copy()
     X = df[features]
     y = df['Label']
+    if len(X) != len(y):
+        st.warning("⚠️ Feature and label lengths do not match. Skipping model training.")
+        return None
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X, y)
     joblib.dump(model, "model.pkl")
