@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import requests
 from ta.momentum import RSIIndicator
+from ta.trend import MACD
+from ta.volatility import BollingerBands
 import mplfinance as mpf
 import matplotlib.pyplot as plt
 import openai
@@ -47,6 +49,12 @@ def fetch_data(symbol, interval):
 def generate_signals(df):
     df['rsi'] = RSIIndicator(df['close'], window=14).rsi()
     df['ema_20'] = df['close'].ewm(span=20).mean()
+    macd = MACD(df['close'])
+    df['macd'] = macd.macd()
+    df['macd_signal'] = macd.macd_signal()
+    bb = BollingerBands(df['close'])
+    df['bb_upper'] = bb.bollinger_hband()
+    df['bb_lower'] = bb.bollinger_lband()
     df['signal'] = 0
     df.loc[(df['rsi'] < 30) & (df['close'] > df['ema_20']), 'signal'] = 1
     df.loc[(df['rsi'] > 70) & (df['close'] < df['ema_20']), 'signal'] = -1
@@ -70,7 +78,7 @@ def train_predictive_model(df):
     df['price_change'] = df['close'].pct_change()
     df['volatility'] = df['close'].rolling(window=10).std()
     df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
-    features = ["rsi", "ema_20", "price_change", "volatility", "volume_surge"]
+    features = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "price_change", "volatility", "volume_surge"]
     df = df.dropna(subset=features + ['Label'])
     X = df[features]
     y = df['Label']
@@ -79,7 +87,7 @@ def train_predictive_model(df):
     joblib.dump(model, "model.pkl")
     shared_memory['features'] = features
     shared_memory['model'] = model
-    shared_memory['last_df'] = df  # store entire feature data
+    shared_memory['last_df'] = df
     return model
 
 def predict_current(df):
