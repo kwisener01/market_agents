@@ -76,21 +76,18 @@ def plot_chart(df):
     return fig
 
 def train_predictive_model(df):
-    df = df.dropna()
+    df = df.dropna().copy()
     df['Label'] = df['signal'].map({1: "Buy", -1: "Sell", 0: "Hold"})
     df['price_change'] = df['close'].pct_change()
     df['volatility'] = df['close'].rolling(window=10).std()
     df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
     features = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "vwap", "price_change", "volatility", "volume_surge"]
     df = df.dropna(subset=features + ['Label'])
-    if df.empty:
-        st.warning("⚠️ No valid training data available after preprocessing.")
+    if df.empty or len(df) < 50:
+        st.warning(f"⚠️ Not enough valid training data after feature processing. Found: {len(df)} rows.")
         return None
     X = df[features]
     y = df['Label']
-    if len(X) != len(y):
-        st.warning("⚠️ Feature and label lengths do not match. Skipping model training.")
-        return None
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X, y)
     joblib.dump(model, "model.pkl")
@@ -110,8 +107,18 @@ def predict_current(df):
             return None
         pred = shared_memory['model'].predict(latest)[0]
         proba = shared_memory['model'].predict_proba(latest)[0].max()
-        return pred, proba
+        return pred, proba, latest.iloc[0].to_dict()
     except KeyError:
+        return None
+
+def train_model_from_yahoo(symbol, period="7d"):
+    try:
+        df = yf.download(symbol, interval="1m", period=period)
+        df = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
+        df.index.name = "datetime"
+        return train_predictive_model(generate_signals(df))
+    except Exception as e:
+        st.error(f"Yahoo Training Error: {e}")
         return None
 
 def ml_insight_agent():
@@ -137,17 +144,23 @@ if data is not None:
     signals = generate_signals(data)
     fig = plot_chart(signals)
     st.pyplot(fig)
-    model = train_predictive_model(signals)
+
+    if os.path.exists("model.pkl"):
+        shared_memory['model'] = joblib.load("model.pkl")
+        shared_memory['features'] = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "vwap", "price_change", "volatility", "volume_surge"]
 
     pred_result = predict_current(signals)
     if pred_result:
-        pred, conf = pred_result
+        pred, conf, feature_vals = pred_result
         price = signals['close'].iloc[-1]
         now_est = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d %I:%M:%S %p")
         st.subheader(f"🕒 Time: {now_est}")
         st.metric("📊 Prediction", pred)
         st.metric("📈 Confidence", f"{conf:.2%}")
         st.metric("💵 Current Price", f"${price:.2f}")
+
+        st.write("### 🔍 Current Feature Snapshot")
+        st.json(feature_vals)
 
         if pred == "Hold":
             desc = "Sideways market conditions. Better to wait."
@@ -163,3 +176,12 @@ if st.button("Run ML Insight Agent"):
     st.info(ml_insight_agent())
     st.info(market_agent())
     st.success(manager_agent())
+
+# Manual training option
+st.header("🧠 Train Model from Yahoo Finance")
+if st.button("Train with Yahoo 7d"):
+    model = train_model_from_yahoo(SYMBOL, period="7d")
+    if model:
+        st.success("✅ Model trained using Yahoo Finance data.")
+    else:
+        st.error("❌ Training failed. See warning above.")
