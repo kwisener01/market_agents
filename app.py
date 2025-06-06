@@ -44,10 +44,12 @@ def fetch_data(symbol, interval):
     df = pd.DataFrame(response['values'])
     df['datetime'] = pd.to_datetime(df['datetime'])
     df = df.sort_values('datetime').set_index('datetime')
+    df.columns = [c.lower() for c in df.columns]
     df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
     return df
 
 def generate_signals(df):
+    df.columns = [c.lower() for c in df.columns]
     df['rsi'] = RSIIndicator(df['close'], window=14).rsi()
     df['ema_20'] = df['close'].ewm(span=20).mean()
     macd = MACD(df['close'])
@@ -78,17 +80,18 @@ def plot_chart(df):
 def train_predictive_model(df):
     df = generate_signals(df)
     df = df.dropna().copy()
-    df['Label'] = df['signal'].map({1: "Buy", -1: "Sell", 0: "Hold"})
+    df.columns = [c.lower() for c in df.columns]
+    df['label'] = df['signal'].map({1: "Buy", -1: "Sell", 0: "Hold"})
     df['price_change'] = df['close'].pct_change()
     df['volatility'] = df['close'].rolling(window=10).std()
     df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
     features = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "vwap", "price_change", "volatility", "volume_surge"]
-    df = df.dropna(subset=features + ['Label'])
+    df = df.dropna(subset=features + ['label'])
     if df.empty or len(df) < 50:
         st.warning(f"\u26a0\ufe0f Not enough valid training data after feature processing. Found: {len(df)} rows.")
         return None
     X = df[features]
-    y = df['Label']
+    y = df['label']
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X, y)
     joblib.dump(model, "model.pkl")
@@ -176,6 +179,7 @@ if st.button("Train Model on Yahoo Finance"):
             else:
                 raise ValueError("No 'close' or 'Close' column found in Yahoo data.")
         hist = hist.reset_index().set_index("datetime")
+        hist.columns = [c.lower() for c in hist.columns]
         hist = generate_signals(hist)
         trained_model = train_predictive_model(hist)
         if trained_model:
