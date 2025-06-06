@@ -50,6 +50,8 @@ def fetch_data(symbol, interval):
 
 def generate_signals(df):
     df.columns = [c.lower() for c in df.columns]
+    if 'close' not in df.columns:
+        raise ValueError("Missing 'close' column after column standardization.")
     df['rsi'] = RSIIndicator(df['close'], window=14).rsi()
     df['ema_20'] = df['close'].ewm(span=20).mean()
     macd = MACD(df['close'])
@@ -88,7 +90,7 @@ def train_predictive_model(df):
     features = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "vwap", "price_change", "volatility", "volume_surge"]
     df = df.dropna(subset=features + ['label'])
     if df.empty or len(df) < 50:
-        st.warning(f"\u26a0\ufe0f Not enough valid training data after feature processing. Found: {len(df)} rows.")
+        st.warning(f"⚠️ Not enough valid training data after feature processing. Found: {len(df)} rows.")
         return None
     X = df[features]
     y = df['label']
@@ -174,12 +176,8 @@ if st.button("Train Model on Yahoo Finance"):
         hist.columns = [str(c).replace(" ", "_").lower() for c in hist.columns]
         hist.index.name = "datetime"
         if 'close' not in hist.columns:
-            if 'Close' in hist.columns:
-                hist['close'] = hist['Close']
-            else:
-                raise ValueError("No 'close' or 'Close' column found in Yahoo data.")
+            raise ValueError("No 'close' column found in Yahoo data after renaming.")
         hist = hist.reset_index().set_index("datetime")
-        hist.columns = [c.lower() for c in hist.columns]
         hist = generate_signals(hist)
         trained_model = train_predictive_model(hist)
         if trained_model:
