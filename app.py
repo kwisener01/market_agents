@@ -166,8 +166,7 @@ if data is not None:
 
 if st.button("Train Model on Yahoo Finance"):
     try:
-        hist_result = yf.download(SYMBOL, period="7d", interval="1m")
-        hist = hist_result[0] if isinstance(hist_result, tuple) else hist_result
+        hist = yf.download(SYMBOL, period="7d", interval="1m")
         hist = hist.dropna()
         hist.columns = [str(c).replace(" ", "_").lower() for c in hist.columns]
         hist.index.name = "datetime"
