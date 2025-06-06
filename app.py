@@ -45,7 +45,11 @@ def fetch_data(symbol, interval):
     df['datetime'] = pd.to_datetime(df['datetime'])
     df = df.sort_values('datetime').set_index('datetime')
     df.columns = [c.lower() for c in df.columns]
-    df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
+    required_cols = ['open', 'high', 'low', 'close', 'volume']
+    if not all(col in df.columns for col in required_cols):
+        st.error(f"Missing required columns from Twelve Data: {set(required_cols) - set(df.columns)}")
+        return None
+    df[required_cols] = df[required_cols].astype(float)
     return df
 
 def generate_signals(df):
@@ -173,7 +177,7 @@ if st.button("Train Model on Yahoo Finance"):
     try:
         hist = yf.download(SYMBOL, period="7d", interval="1m")
         hist = hist.dropna()
-        hist.columns = [str(c).replace(" ", "_").lower() for c in hist.columns]
+        hist.columns = [str(c).strip().replace(" ", "_").lower() for c in hist.columns]
         hist.index.name = "datetime"
         if 'close' not in hist.columns:
             raise ValueError("No 'close' column found in Yahoo data after renaming.")
