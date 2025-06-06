@@ -26,7 +26,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 SYMBOL = st.selectbox("Select Symbol", ["SPY", "QQQ", "AAPL", "TSLA"], index=0)
 INTERVAL = "1min"
 
-refresh_rate = st.selectbox("⏱️ Auto-Refresh Interval", ["Do not refresh", "1 min", "2 min", "5 min"], index=1)
+refresh_rate = st.selectbox("\u23f1\ufe0f Auto-Refresh Interval", ["Do not refresh", "1 min", "2 min", "5 min"], index=1)
 interval_mapping = {"Do not refresh": 0, "1 min": 60 * 1000, "2 min": 120 * 1000, "5 min": 300 * 1000}
 interval_ms = interval_mapping[refresh_rate]
 if interval_ms > 0:
@@ -84,10 +84,10 @@ def train_predictive_model(df):
     features = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "vwap", "price_change", "volatility", "volume_surge"]
     df = df.dropna(subset=features + ['Label'])
     if df.empty or len(df) < 50:
-        st.warning(f"⚠️ Not enough valid training data after feature processing. Found: {len(df)} rows.")
+        st.warning(f"\u26a0\ufe0f Not enough valid training data after feature processing. Found: {len(df)} rows.")
         return None
     X = df[features]
-    y = df['Label']
+    y = df['Label'].squeeze()
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X, y)
     joblib.dump(model, "model.pkl")
@@ -97,91 +97,46 @@ def train_predictive_model(df):
     df.to_csv("prediction_history.csv")
     return model
 
-def predict_current(df):
-    if 'model' not in shared_memory:
-        return None
-    features = shared_memory['features']
-    try:
-        latest = df[features].dropna().iloc[-1:]
-        if latest.empty:
-            return None
-        pred = shared_memory['model'].predict(latest)[0]
-        proba = shared_memory['model'].predict_proba(latest)[0].max()
-        return pred, proba, latest.iloc[0].to_dict()
-    except KeyError:
-        return None
+def display_prediction(df, model):
+    if model is None:
+        st.error("⚠️ No model available. Please train one.")
+        return
+    features = shared_memory.get('features')
+    if not features or not set(features).issubset(df.columns):
+        st.warning("⚠️ Required features are missing in data.")
+        return
+    latest = df.iloc[-1:]
+    X_latest = latest[features]
+    pred = model.predict(X_latest)[0]
+    price = latest['close'].values[0]
+    now = datetime.now(pytz.timezone("US/Eastern"))
+    st.metric("Current Price", f"${price:.2f}")
+    st.metric("Current Time (EST)", now.strftime("%I:%M %p"))
+    st.metric("Suggested Action", pred)
 
-def train_model_from_yahoo(symbol, period="7d"):
-    try:
-        df = yf.download(symbol, interval="1m", period=period)
-        df = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
-        df.index.name = "datetime"
-        return train_predictive_model(generate_signals(df))
-    except Exception as e:
-        st.error(f"Yahoo Training Error: {e}")
-        return None
+if os.path.exists("model.pkl"):
+    model = joblib.load("model.pkl")
+    shared_memory['model'] = model
+else:
+    model = None
 
-def ml_insight_agent():
-    insight = "Added VWAP for richer market signal. Recommend exploring clustering for regime shifts and combining with news sentiment."
-    shared_memory['ml_insight'] = insight
-    return insight
-
-def market_agent():
-    info = f"Checking macro view for {SYMBOL}. No red flags today. Medium volatility expected."
-    shared_memory['market_summary'] = info
-    return info
-
-def manager_agent():
-    summary = f"Model trained. Using features: {shared_memory.get('features', [])}\n" \
-              f"ML Suggestions: {shared_memory.get('ml_insight', '')}\n" \
-              f"Market Summary: {shared_memory.get('market_summary', '')}"
-    return summary
-
-# Load data and update live chart and predictions
-st.header("📈 Live Market Dashboard")
 data = fetch_data(SYMBOL, INTERVAL)
 if data is not None:
     signals = generate_signals(data)
     fig = plot_chart(signals)
     st.pyplot(fig)
+    display_prediction(signals, shared_memory.get('model'))
 
-    if os.path.exists("model.pkl"):
-        shared_memory['model'] = joblib.load("model.pkl")
-        shared_memory['features'] = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "vwap", "price_change", "volatility", "volume_surge"]
-
-    pred_result = predict_current(signals)
-    if pred_result:
-        pred, conf, feature_vals = pred_result
-        price = signals['close'].iloc[-1]
-        now_est = datetime.now(pytz.timezone('US/Eastern')).strftime("%Y-%m-%d %I:%M:%S %p")
-        st.subheader(f"🕒 Time: {now_est}")
-        st.metric("📊 Prediction", pred)
-        st.metric("📈 Confidence", f"{conf:.2%}")
-        st.metric("💵 Current Price", f"${price:.2f}")
-
-        st.write("### 🔍 Current Feature Snapshot")
-        st.json(feature_vals)
-
-        if pred == "Hold":
-            desc = "Sideways market conditions. Better to wait."
-        elif pred == "Buy":
-            desc = "Momentum and volume support a potential up move."
-        else:
-            desc = "Indicators suggest a pullback risk."
-        st.info(f"📉 Market Condition: {desc}")
-
-# Agent Controls
-st.header("🤖 Agent Insights")
-if st.button("Run ML Insight Agent"):
-    st.info(ml_insight_agent())
-    st.info(market_agent())
-    st.success(manager_agent())
-
-# Manual training option
-st.header("🧠 Train Model from Yahoo Finance")
-if st.button("Train with Yahoo 7d"):
-    model = train_model_from_yahoo(SYMBOL, period="7d")
-    if model:
-        st.success("✅ Model trained using Yahoo Finance data.")
-    else:
-        st.error("❌ Training failed. See warning above.")
+if st.button("Train Model on Yahoo Finance"):
+    try:
+        hist = yf.download(SYMBOL, period="7d", interval="1m")
+        hist = hist.dropna().rename(columns=str.lower)
+        hist.columns = [c.replace(" ", "_") for c in hist.columns]
+        hist.index.name = "datetime"
+        hist = hist.rename(columns={"adj_close": "close"})
+        hist = hist.reset_index().set_index("datetime")
+        trained_model = train_predictive_model(hist)
+        if trained_model:
+            st.success("✅ Model trained and saved as model.pkl.")
+    except Exception as e:
+        st.error(f"Yahoo Training Error: {e}")
