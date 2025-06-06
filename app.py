@@ -171,6 +171,8 @@ if st.button("Train Model on Yahoo Finance"):
         hist.columns = [str(c).replace(" ", "_").lower() for c in hist.columns]
         hist.index.name = "datetime"
         hist = hist.rename(columns={"adj_close": "close"})
+        if 'close' not in hist.columns:
+            hist['close'] = hist['close'].squeeze() if isinstance(hist['close'], (pd.Series, pd.DataFrame)) else hist.iloc[:, 3]
         hist = hist.reset_index().set_index("datetime")
         hist = generate_signals(hist)
         trained_model = train_predictive_model(hist)
