@@ -87,7 +87,7 @@ def train_predictive_model(df):
         st.warning(f"\u26a0\ufe0f Not enough valid training data after feature processing. Found: {len(df)} rows.")
         return None
     X = df[features]
-    y = df['Label'].values.ravel()
+    y = df['Label']
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X, y)
     joblib.dump(model, "model.pkl")
@@ -166,12 +166,9 @@ if data is not None:
 if st.button("Train Model on Yahoo Finance"):
     try:
         hist_result = yf.download(SYMBOL, period="7d", interval="1m")
-        if isinstance(hist_result, tuple):
-            hist = hist_result[0]
-        else:
-            hist = hist_result
-        hist = hist.dropna().rename(columns=str.lower)
-        hist.columns = [c.replace(" ", "_") for c in hist.columns]
+        hist = hist_result[0] if isinstance(hist_result, tuple) else hist_result
+        hist = hist.dropna()
+        hist.columns = [str(c).replace(" ", "_").lower() for c in hist.columns]
         hist.index.name = "datetime"
         hist = hist.rename(columns={"adj_close": "close"})
         hist = hist.reset_index().set_index("datetime")
