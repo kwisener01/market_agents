@@ -76,6 +76,7 @@ def plot_chart(df):
     return fig
 
 def train_predictive_model(df):
+    df = generate_signals(df)
     df = df.dropna().copy()
     df['Label'] = df['signal'].map({1: "Buy", -1: "Sell", 0: "Hold"})
     df['price_change'] = df['close'].pct_change()
@@ -172,6 +173,7 @@ if st.button("Train Model on Yahoo Finance"):
         hist.index.name = "datetime"
         hist = hist.rename(columns={"adj_close": "close"})
         hist = hist.reset_index().set_index("datetime")
+        hist = generate_signals(hist)
         trained_model = train_predictive_model(hist)
         if trained_model:
             st.success("✅ Model trained and saved as model.pkl.")
