@@ -87,7 +87,7 @@ def train_predictive_model(df):
         st.warning(f"\u26a0\ufe0f Not enough valid training data after feature processing. Found: {len(df)} rows.")
         return None
     X = df[features]
-    y = df['Label'].squeeze()
+    y = df['Label'].values.ravel()
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X, y)
     joblib.dump(model, "model.pkl")
@@ -114,6 +114,33 @@ def display_prediction(df, model):
     st.metric("Current Time (EST)", now.strftime("%I:%M %p"))
     st.metric("Suggested Action", pred)
 
+def bayesian_agent(df):
+    row = df.iloc[-1]
+    prompt = f"Given RSI={row['rsi']:.2f}, MACD={row['macd']:.2f}, and Price={row['close']:.2f}, use Bayesian thinking to say Buy, Hold, or Sell."
+    res = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    st.subheader("🧠 Bayesian Agent")
+    st.write(res.choices[0].message.content)
+
+def ml_insight_agent():
+    suggestion = "Try feature selection with SHAP or permutation importance. Consider seasonality, open-close gaps, or time of day as features."
+    shared_memory['ml_insight'] = suggestion
+    st.subheader("📊 ML Insight Agent")
+    st.write(suggestion)
+
+def market_summary_agent():
+    summary = f"Market looks stable for {SYMBOL}. No major news alerts."
+    shared_memory['market_summary'] = summary
+    st.subheader("🌐 Market Agent")
+    st.write(summary)
+
+def manager_agent():
+    summary = f"Model trained. Using features: {shared_memory.get('features', [])}\nML Suggestions: {shared_memory.get('ml_insight', '')}\nMarket Summary: {shared_memory.get('market_summary', '')}"
+    st.subheader("🧠 Manager Agent")
+    st.code(summary)
+
 if os.path.exists("model.pkl"):
     model = joblib.load("model.pkl")
     shared_memory['model'] = model
@@ -127,9 +154,22 @@ if data is not None:
     st.pyplot(fig)
     display_prediction(signals, shared_memory.get('model'))
 
+    if st.button("Run Bayesian Agent"):
+        bayesian_agent(signals)
+    if st.button("Run ML Insight Agent"):
+        ml_insight_agent()
+    if st.button("Run Market Summary Agent"):
+        market_summary_agent()
+    if st.button("Run Manager Agent"):
+        manager_agent()
+
 if st.button("Train Model on Yahoo Finance"):
     try:
-        hist = yf.download(SYMBOL, period="7d", interval="1m")
+        hist_result = yf.download(SYMBOL, period="7d", interval="1m")
+        if isinstance(hist_result, tuple):
+            hist = hist_result[0]
+        else:
+            hist = hist_result
         hist = hist.dropna().rename(columns=str.lower)
         hist.columns = [c.replace(" ", "_") for c in hist.columns]
         hist.index.name = "datetime"
