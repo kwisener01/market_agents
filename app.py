@@ -93,11 +93,17 @@ def train_predictive_model(df):
     df['volume_surge'] = df['volume'] / df['volume'].rolling(10).mean()
     features = ["rsi", "ema_20", "macd", "macd_signal", "bb_upper", "bb_lower", "vwap", "price_change", "volatility", "volume_surge"]
     df = df.dropna(subset=features + ['label'])
+
+    st.write("🔍 Data preview before training:", df.head())
+
     if df.empty or len(df) < 50:
         st.warning(f"⚠️ Not enough valid training data after feature processing. Found: {len(df)} rows.")
         return None
+
     X = df[features]
     y = df['label']
+    st.write("📐 Feature matrix shape:", X.shape, "| Target shape:", y.shape)
+
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(X, y)
     joblib.dump(model, "model.pkl")
@@ -105,6 +111,11 @@ def train_predictive_model(df):
     shared_memory['model'] = model
     shared_memory['last_df'] = df
     df.to_csv("prediction_history.csv")
+
+    if os.path.exists("model.pkl"):
+        st.success("✅ model.pkl successfully written to disk.")
+    else:
+        st.error("❌ model.pkl was not created. Training may have failed.")
     return model
 
 # ...rest of code remains unchanged...
@@ -116,10 +127,11 @@ if st.button("Train Model on Yahoo Finance"):
             raise ValueError("Yahoo Finance returned no data.")
 
         hist.columns = [col.lower().strip().replace(" ", "_") for col in hist.columns]
-
         hist = hist.dropna()
         hist.index.name = "datetime"
         hist = hist.reset_index().set_index("datetime")
+
+        st.info(f"✅ Yahoo data shape after cleanup: {hist.shape}")
 
         if 'close' not in hist.columns:
             raise ValueError(f"No 'close' column found in Yahoo data after cleanup. Columns available: {list(hist.columns)}")
@@ -128,9 +140,6 @@ if st.button("Train Model on Yahoo Finance"):
         trained_model = train_predictive_model(hist)
         if trained_model:
             st.success("✅ Model trained and saved as model.pkl.")
-
-        if st.button("Run Troubleshooting Agent"):
-            troubleshooting_agent(hist)
 
     except Exception as e:
         st.error(f"Yahoo Training Error: {e}")
