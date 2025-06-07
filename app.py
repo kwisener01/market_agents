@@ -151,6 +151,16 @@ def manager_agent():
     st.subheader("🧠 Manager Agent")
     st.code(summary)
 
+def troubleshooting_agent(df):
+    st.subheader("🛠️ Troubleshooting Agent")
+    st.write("Columns detected:", list(df.columns))
+    if df.empty:
+        st.warning("⚠️ The DataFrame is empty.")
+    if 'close' not in df.columns:
+        st.error("❌ 'close' column missing.")
+    else:
+        st.success("✅ 'close' column is present.")
+
 if os.path.exists("model.pkl"):
     model = joblib.load("model.pkl")
     shared_memory['model'] = model
@@ -176,15 +186,28 @@ if data is not None:
 if st.button("Train Model on Yahoo Finance"):
     try:
         hist = yf.download(SYMBOL, period="7d", interval="1m")
+        if hist is None or hist.empty:
+            raise ValueError("Yahoo Finance returned no data.")
+
+        if isinstance(hist.columns, pd.MultiIndex):
+            hist.columns = ['_'.join(col).strip().lower() for col in hist.columns.values]
+        else:
+            hist.columns = [col.strip().lower().replace(" ", "_") for col in hist.columns]
+
         hist = hist.dropna()
-        hist.columns = [str(c).strip().replace(" ", "_").lower() for c in hist.columns]
         hist.index.name = "datetime"
-        if 'close' not in hist.columns:
-            raise ValueError("No 'close' column found in Yahoo data after renaming.")
         hist = hist.reset_index().set_index("datetime")
+
+        if 'close' not in hist.columns:
+            raise ValueError(f"No 'close' column found in Yahoo data after renaming. Columns available: {list(hist.columns)}")
+
         hist = generate_signals(hist)
         trained_model = train_predictive_model(hist)
         if trained_model:
             st.success("✅ Model trained and saved as model.pkl.")
+
+        if st.button("Run Troubleshooting Agent"):
+            troubleshooting_agent(hist)
+
     except Exception as e:
         st.error(f"Yahoo Training Error: {e}")
