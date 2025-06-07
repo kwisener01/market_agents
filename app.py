@@ -2,21 +2,19 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import joblib
-import requests
-from io import BytesIO
+import gdown
 import streamlit as st
 
 # --- Streamlit Integration ---
 st.set_page_config(page_title="RF Model Equity Viewer", layout="wide")
 st.title("📈 Random Forest Equity Curve Viewer")
 
-# --- Load RF model from Google Drive ---
+# --- Load RF model from Google Drive using gdown ---
 @st.cache_resource
-def load_model_from_drive(file_id):
-    url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    response = requests.get(url)
-    return joblib.load(BytesIO(response.content))
-
+def load_model_from_drive(file_id, output_path="rf_model.pkl"):
+    url = f"https://drive.google.com/uc?id={file_id}"
+    gdown.download(url, output_path, quiet=False)
+    return joblib.load(output_path)
 # Replace with your actual file ID
 model_file_id = "1_ZZSAU2P6H5_kVbp8RLudY8FRr0fSuQ6"
 rf_model = load_model_from_drive(model_file_id)
