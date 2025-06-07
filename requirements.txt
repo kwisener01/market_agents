@@ -8,3 +8,4 @@ streamlit-autorefresh
 joblib
 scikit-learn>=1.3
 yfinance
+gdown
