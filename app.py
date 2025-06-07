@@ -194,6 +194,15 @@ if st.button("Train Model on Yahoo Finance"):
         else:
             hist.columns = [col.strip().lower().replace(" ", "_") for col in hist.columns]
 
+        mapping = {
+            f'close_{SYMBOL.lower()}': 'close',
+            f'open_{SYMBOL.lower()}': 'open',
+            f'high_{SYMBOL.lower()}': 'high',
+            f'low_{SYMBOL.lower()}': 'low',
+            f'volume_{SYMBOL.lower()}': 'volume'
+        }
+        hist.rename(columns=mapping, inplace=True)
+
         hist = hist.dropna()
         hist.index.name = "datetime"
         hist = hist.reset_index().set_index("datetime")
