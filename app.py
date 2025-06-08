@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import time
 
+# --- Set page config FIRST ---
+st.set_page_config(layout="wide")
+
 # --- Load RF model from Google Drive using gdown ---
 @st.cache_resource
 def load_model_from_drive(file_id, output_path="rf_model.pkl"):
@@ -85,7 +88,6 @@ def predict(df):
     return signal_map[pred], confidence, df
 
 # --- Streamlit App ---
-st.set_page_config(layout="wide")
 st.title("📈 Real-Time SPY Buy/Sell/Hold Signals")
 st.markdown("Powered by Random Forest & Twelve Data")
 
