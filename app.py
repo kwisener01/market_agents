@@ -7,6 +7,7 @@ from datetime import datetime
 import pytz
 import joblib
 import gdown
+import matplotlib.pyplot as plt
 
 # --- Load RF model from Google Drive using gdown ---
 @st.cache_resource
@@ -75,17 +76,19 @@ def predict(df):
     pred = np.argmax(prob)
     confidence = np.max(prob)
     signal_map = {0: -1, 1: 0, 2: 1}
-    return signal_map[pred], confidence
+    return signal_map[pred], confidence, df
 
 # --- Streamlit App ---
 st.title("📈 Real-Time SPY Buy/Sell/Hold Signals")
 st.markdown("Powered by Random Forest & Twelve Data")
 
+signal_history = []
+
 if st.button("📡 Fetch Live Signal"):
     try:
         live_df = fetch_live_data("SPY", interval="1min")
         if live_df is not None:
-            signal, confidence = predict(live_df)
+            signal, confidence, live_df = predict(live_df)
             label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
 
             st.metric("Signal", label)
@@ -95,5 +98,13 @@ if st.button("📡 Fetch Live Signal"):
                 st.success(f"✅ High confidence: {label}")
             else:
                 st.warning(f"⚠️ Low confidence: {label}")
+
+            # Append to signal history
+            signal_history.append({"Time": live_df.index[-1], "Signal": label, "Confidence": confidence})
+
+            # Plot signal history
+            if len(signal_history) > 1:
+                hist_df = pd.DataFrame(signal_history).set_index("Time")
+                st.line_chart(hist_df[["Confidence"]])
     except Exception as e:
         st.error(f"Error fetching or predicting live data: {e}")
