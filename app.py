@@ -90,8 +90,11 @@ def add_indicators(df):
 # --- Prediction Logic ---
 def predict(df):
     df = add_indicators(df)
-    if df.shape[0] == 0:
-        raise ValueError("Not enough data after indicator calculation. Need at least 50 rows.")
+    available_rows = df.shape[0]
+    if available_rows == 0:
+        raise ValueError("No valid rows after indicator calculation.")
+    elif available_rows < 50:
+        raise ValueError(f"Not enough data after indicator calculation. Got {available_rows}, need at least 50 rows.")
     latest = df.iloc[[-1]]
     X_live = latest[FEATURES]
     prob = rf_model.predict_proba(X_live)
@@ -123,6 +126,7 @@ with col2:
         try:
             live_df = fetch_live_data("SPY", interval="1min")
             if live_df is not None:
+                st.info(f"📊 Live rows available before indicators: {len(live_df)}")
                 signal, confidence, live_df = predict(live_df)
                 label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
 
