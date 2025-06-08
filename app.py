@@ -61,7 +61,7 @@ def fetch_live_data(symbol, interval):
 
 @st.cache_data(ttl=300)
 def fetch_alphavantage_data(symbol="SPY", interval="1min"):
-    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval={interval}&outputsize=full&apikey={AV_KEY}&datatype=csv"
+    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval={interval}&outputsize=compact&apikey={AV_KEY}&datatype=csv"
     response = requests.get(url)
     if response.status_code != 200:
         st.error("AlphaVantage API Error")
@@ -107,4 +107,19 @@ def predict(df):
     signal_map = {0: -1, 1: 0, 2: 1}
     return signal_map[pred], confidence, df
 
-# (Remaining code unchanged...)
+# --- Display AlphaVantage Candlestick Only (No indicators/statistics) ---
+with st.expander("📉 AlphaVantage Candlestick Chart"):
+    alpha_df = fetch_alphavantage_data("SPY", interval="1min")
+    if alpha_df is not None and not alpha_df.empty:
+        st.write(f"✅ AlphaVantage raw rows: {len(alpha_df)}")
+        fig = go.Figure(data=[
+            go.Candlestick(x=alpha_df.index,
+                           open=alpha_df['open'],
+                           high=alpha_df['high'],
+                           low=alpha_df['low'],
+                           close=alpha_df['close'])
+        ])
+        fig.update_layout(title="AlphaVantage 1-Min SPY Candlestick", xaxis_rangeslider_visible=False)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("⚠️ No AlphaVantage data available.")
