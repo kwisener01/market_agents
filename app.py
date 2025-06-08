@@ -105,12 +105,16 @@ def add_indicators(df):
 
 # --- Prediction Logic ---
 def predict(df):
+    raw_rows = df.shape[0]
     df = add_indicators(df)
     available_rows = df.shape[0]
+    st.info(f"📊 Raw rows: {raw_rows}, Rows after indicators: {available_rows}, Required: 50")
+
     if available_rows == 0:
         raise ValueError("No valid rows after indicator calculation.")
     elif available_rows < 50:
         raise ValueError(f"Not enough data after indicator calculation. Got {available_rows}, need at least 50 rows.")
+
     latest = df.iloc[[-1]]
     X_live = latest[FEATURES]
     prob = rf_model.predict_proba(X_live)
@@ -118,66 +122,3 @@ def predict(df):
     confidence = np.max(prob)
     signal_map = {0: -1, 1: 0, 2: 1}
     return signal_map[pred], confidence, df
-
-# --- AlphaVantage Candlestick Chart ---
-with st.expander("📉 AlphaVantage Candlestick Chart"):
-    alpha_df = fetch_alphavantage_data("SPY", interval="1min")
-    if alpha_df is not None and not alpha_df.empty:
-        fig_alpha = go.Figure(data=[
-            go.Candlestick(
-                x=alpha_df.index,
-                open=alpha_df["open"],
-                high=alpha_df["high"],
-                low=alpha_df["low"],
-                close=alpha_df["close"],
-                name="AlphaVantage"
-            )
-        ])
-        fig_alpha.update_layout(title="SPY - AlphaVantage Candlestick Chart", xaxis_title="Time", yaxis_title="Price")
-        st.plotly_chart(fig_alpha, use_container_width=True)
-    else:
-        st.warning("No AlphaVantage data available.")
-
-# --- Live Signal Section ---
-st.header("📡 Real-Time Signal")
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    now = time.time()
-    if refresh_interval is not None and now - st.session_state.last_refresh >= refresh_interval:
-        st.session_state.last_refresh = now
-    df_live = fetch_live_data("SPY", interval="1min")
-    if df_live is not None:
-        fig = go.Figure(data=[
-            go.Candlestick(
-                x=df_live.index,
-                open=df_live["open"],
-                high=df_live["high"],
-                low=df_live["low"],
-                close=df_live["close"],
-                name="Live"
-            )
-        ])
-        fig.update_layout(title="Live SPY Chart (Twelve Data)", xaxis_title="Time", yaxis_title="Price")
-        st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    if st.button("Run Model"):
-        try:
-            signal, confidence, full_df = predict(df_live)
-            signal_label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
-            st.metric("Signal", signal_label)
-            st.metric("Confidence", f"{confidence:.2%}")
-
-            # Save history
-            now = datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d %H:%M")
-            st.session_state.signal_history.append({"time": now, "signal": signal_label, "confidence": confidence})
-
-        except Exception as e:
-            st.error(f"Error running model: {e}")
-
-# --- Signal History ---
-if st.session_state.signal_history:
-    st.subheader("📜 Signal History")
-    hist_df = pd.DataFrame(st.session_state.signal_history)
-    st.dataframe(hist_df, use_container_width=True)
