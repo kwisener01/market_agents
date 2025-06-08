@@ -33,6 +33,7 @@ with open("rf_config.pkl", "rb") as f:
 
 CONF_THRESH = CONFIG["confidence_threshold"]
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
+AV_KEY = st.secrets["ALPHA_VANTAGE"]["API_KEY"]
 
 # --- Session State for History ---
 if "signal_history" not in st.session_state:
@@ -56,6 +57,18 @@ def fetch_live_data(symbol, interval):
         return None
     df[required_cols] = df[required_cols].astype(float)
     return df
+
+@st.cache_data(ttl=300)
+def fetch_alphavantage_data(symbol="SPY", interval="1min"):
+    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval={interval}&outputsize=compact&apikey={AV_KEY}&datatype=csv"
+    response = requests.get(url)
+    if response.status_code != 200:
+        st.error("AlphaVantage API Error")
+        return None
+    df = pd.read_csv(pd.compat.StringIO(response.text))
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df = df.rename(columns={"timestamp": "datetime"}).set_index("datetime")
+    return df.sort_index()
 
 # --- Feature Engineering ---
 def add_indicators(df):
@@ -89,7 +102,7 @@ def predict(df):
 
 # --- Streamlit App ---
 st.title("📈 Real-Time SPY Buy/Sell/Hold Signals")
-st.markdown("Powered by Random Forest & Twelve Data")
+st.markdown("Powered by Random Forest, Twelve Data & AlphaVantage")
 
 refresh_rate = st.selectbox("🔄 Auto-Refresh Rate:", ["Off", "30 sec", "60 sec"], index=2)
 interval_map = {"Off": 0, "30 sec": 30, "60 sec": 60}
@@ -100,7 +113,7 @@ col1, col2 = st.columns([3, 1])
 
 # --- Chart Area ---
 with col1:
-    st.subheader("📊 Live SPY Candlestick Chart")
+    st.subheader("📊 Live SPY Candlestick Chart (Twelve Data)")
     chart_placeholder = st.empty()
 
 # --- Signal Area ---
@@ -149,9 +162,32 @@ while auto_refresh > 0:
                     close=live_df['close']
                 )
             ])
-            fig.update_layout(title="Live SPY Chart", xaxis_title="Time", yaxis_title="Price")
+            fig.update_layout(title="Live SPY Chart (Twelve Data)", xaxis_title="Time", yaxis_title="Price")
             chart_placeholder.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.error(f"Chart update error: {e}")
     time.sleep(auto_refresh)
     st.rerun()
+
+# --- Tabs for AlphaVantage Chart + Stats ---
+tab1, tab2 = st.tabs(["📉 AlphaVantage Chart", "📊 AlphaVantage Stats"])
+
+with tab1:
+    alpha_df = fetch_alphavantage_data("SPY", interval="1min")
+    if alpha_df is not None:
+        fig_hist = go.Figure(data=[
+            go.Candlestick(
+                x=alpha_df.index,
+                open=alpha_df['open'],
+                high=alpha_df['high'],
+                low=alpha_df['low'],
+                close=alpha_df['close']
+            )
+        ])
+        fig_hist.update_layout(title="AlphaVantage SPY 1-Min Historical Chart", xaxis_title="Time", yaxis_title="Price")
+        st.plotly_chart(fig_hist, use_container_width=True)
+
+with tab2:
+    if alpha_df is not None:
+        st.write("## Descriptive Statistics")
+        st.dataframe(alpha_df.describe())
