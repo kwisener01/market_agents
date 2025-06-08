@@ -33,7 +33,8 @@ API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
 # --- Live Data Fetching ---
 
 @st.cache_data(ttl=60)
-def fetch_data(symbol, interval):
+def fetch_live_data(symbol, interval):
+    ...
     url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&apikey={API_KEY}"
     response = requests.get(url).json()
     if 'values' not in response:
