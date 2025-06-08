@@ -133,3 +133,30 @@ if st.sidebar.button("🧪 Test Model with AlphaVantage"):
             st.sidebar.success(f"Model OK — {label} with {confidence:.2%} confidence")
     except Exception as e:
         st.sidebar.error(f"❌ Model test failed: {e}")
+
+# --- Real-time Display ---
+st.header("📡 Real-Time Signal")
+st.subheader("Live SPY Chart (Twelve Data)")
+live_data = fetch_live_data("SPY", interval="1min")
+if live_data is not None:
+    fig = go.Figure(data=[
+        go.Candlestick(
+            x=live_data.index,
+            open=live_data['open'],
+            high=live_data['high'],
+            low=live_data['low'],
+            close=live_data['close']
+        )
+    ])
+    st.plotly_chart(fig, use_container_width=True)
+
+# --- Run Model ---
+if st.button("▶️ Run Model"):
+    try:
+        if live_data is not None:
+            signal, confidence, _ = predict(live_data)
+            label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
+            st.metric("Signal", label)
+            st.metric("Confidence", f"{confidence:.2%}")
+    except Exception as e:
+        st.error(f"Error running model: {e}")
