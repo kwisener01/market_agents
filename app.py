@@ -61,7 +61,7 @@ def fetch_live_data(symbol, interval):
 
 @st.cache_data(ttl=300)
 def fetch_alphavantage_data(symbol="SPY", interval="1min"):
-    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval={interval}&outputsize=compact&apikey={AV_KEY}&datatype=csv"
+    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval={interval}&outputsize=full&apikey={AV_KEY}&datatype=csv"
     response = requests.get(url)
     if response.status_code != 200:
         st.error("AlphaVantage API Error")
