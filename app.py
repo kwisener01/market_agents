@@ -9,6 +9,7 @@ import joblib
 import gdown
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import time
 
 # --- Load RF model from Google Drive using gdown ---
 @st.cache_resource
@@ -80,57 +81,58 @@ def predict(df):
     return signal_map[pred], confidence, df
 
 # --- Streamlit App ---
+st.set_page_config(layout="wide")
 st.title("📈 Real-Time SPY Buy/Sell/Hold Signals")
 st.markdown("Powered by Random Forest & Twelve Data")
 
-signal_history = []
-live_df = None
+refresh_rate = st.selectbox("🔄 Auto-Refresh Rate:", ["Off", "30 sec", "60 sec"], index=2)
+interval_map = {"Off": 0, "30 sec": 30, "60 sec": 60}
+auto_refresh = interval_map[refresh_rate]
+acknowledged = st.checkbox("✅ Acknowledge Signal Alert", value=False)
 
-if st.button("📥 Fetch Live Data"):
+last_signal = st.empty()
+last_confidence = st.empty()
+alert_container = st.empty()
+
+placeholder = st.empty()
+
+while True:
     try:
         live_df = fetch_live_data("SPY", interval="1min")
         if live_df is not None:
-            st.success("✅ Live data fetched.")
+            signal, confidence, live_df = predict(live_df)
+            label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
 
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                fig = go.Figure(data=[
-                    go.Candlestick(
-                        x=live_df.index,
-                        open=live_df['open'],
-                        high=live_df['high'],
-                        low=live_df['low'],
-                        close=live_df['close']
-                    )
-                ])
-                fig.update_layout(title="Live SPY Candlestick Chart", xaxis_title="Time", yaxis_title="Price")
-                st.plotly_chart(fig)
+            with placeholder.container():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    fig = go.Figure(data=[
+                        go.Candlestick(
+                            x=live_df.index,
+                            open=live_df['open'],
+                            high=live_df['high'],
+                            low=live_df['low'],
+                            close=live_df['close']
+                        )
+                    ])
+                    fig.update_layout(title="Live SPY Candlestick Chart", xaxis_title="Time", yaxis_title="Price")
+                    st.plotly_chart(fig, use_container_width=True)
 
-            with col2:
-                if st.button("🤖 Run Model"):
-                    try:
-                        signal, confidence, live_df = predict(live_df)
-                        label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
+                with col2:
+                    last_signal.metric("Signal", label)
+                    last_confidence.metric("Confidence", f"{confidence:.2%}")
 
-                        st.metric("Signal", label)
-                        st.metric("Confidence", f"{confidence:.2%}")
+                    if confidence >= CONF_THRESH:
+                        st.success(f"✅ High confidence: {label}")
+                        if not acknowledged:
+                            alert_container.warning(f"🚨 Signal Alert: {label} (Click checkbox to acknowledge)")
+                    else:
+                        st.warning(f"⚠️ Low confidence: {label}")
 
-                        if confidence >= CONF_THRESH:
-                            st.success(f"✅ High confidence: {label}")
-                        else:
-                            st.warning(f"⚠️ Low confidence: {label}")
-
-                        if not live_df.empty:
-                            signal_history.append({
-                                "Time": live_df.index[-1],
-                                "Signal": label,
-                                "Confidence": confidence
-                            })
-
-                        if len(signal_history) > 1:
-                            hist_df = pd.DataFrame(signal_history).set_index("Time")
-                            st.line_chart(hist_df[["Confidence"]])
-                    except Exception as e:
-                        st.error(f"Error fetching or predicting live data: {e}")
     except Exception as e:
-        st.error(f"Error fetching live data: {e}")
+        st.error(f"Error fetching or predicting live data: {e}")
+
+    if auto_refresh == 0:
+        break
+    time.sleep(auto_refresh)
+    st.rerun()
