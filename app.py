@@ -31,6 +31,10 @@ with open("rf_config.pkl", "rb") as f:
 CONF_THRESH = CONFIG["confidence_threshold"]
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
 
+# --- Session State for History ---
+if "signal_history" not in st.session_state:
+    st.session_state.signal_history = []
+
 # --- Live Data Fetching ---
 @st.cache_data(ttl=60)
 def fetch_live_data(symbol, interval):
@@ -90,49 +94,62 @@ interval_map = {"Off": 0, "30 sec": 30, "60 sec": 60}
 auto_refresh = interval_map[refresh_rate]
 acknowledged = st.checkbox("✅ Acknowledge Signal Alert", value=False)
 
-last_signal = st.empty()
-last_confidence = st.empty()
-alert_container = st.empty()
+col1, col2 = st.columns([3, 1])
 
-placeholder = st.empty()
+# --- Chart Area ---
+with col1:
+    st.subheader("📊 Live SPY Candlestick Chart")
+    chart_placeholder = st.empty()
 
-while True:
+# --- Signal Area ---
+with col2:
+    st.subheader("🔍 Latest Prediction")
+    if st.button("▶️ Run Model"):
+        try:
+            live_df = fetch_live_data("SPY", interval="1min")
+            if live_df is not None:
+                signal, confidence, live_df = predict(live_df)
+                label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
+
+                st.metric("Signal", label)
+                st.metric("Confidence", f"{confidence:.2%}")
+
+                if confidence >= CONF_THRESH:
+                    st.success(f"✅ High confidence: {label}")
+                    if not acknowledged:
+                        st.warning(f"🚨 Signal Alert: {label} (Acknowledge below)")
+
+                st.session_state.signal_history.append({
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "signal": label,
+                    "confidence": confidence
+                })
+
+        except Exception as e:
+            st.error(f"Error fetching or predicting live data: {e}")
+
+    if st.session_state.signal_history:
+        st.markdown("---")
+        st.markdown("## 📜 Signal History")
+        st.dataframe(pd.DataFrame(st.session_state.signal_history)[::-1])
+
+# --- Auto-refresh Chart ---
+while auto_refresh > 0:
     try:
         live_df = fetch_live_data("SPY", interval="1min")
         if live_df is not None:
-            signal, confidence, live_df = predict(live_df)
-            label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
-
-            with placeholder.container():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    fig = go.Figure(data=[
-                        go.Candlestick(
-                            x=live_df.index,
-                            open=live_df['open'],
-                            high=live_df['high'],
-                            low=live_df['low'],
-                            close=live_df['close']
-                        )
-                    ])
-                    fig.update_layout(title="Live SPY Candlestick Chart", xaxis_title="Time", yaxis_title="Price")
-                    st.plotly_chart(fig, use_container_width=True)
-
-                with col2:
-                    last_signal.metric("Signal", label)
-                    last_confidence.metric("Confidence", f"{confidence:.2%}")
-
-                    if confidence >= CONF_THRESH:
-                        st.success(f"✅ High confidence: {label}")
-                        if not acknowledged:
-                            alert_container.warning(f"🚨 Signal Alert: {label} (Click checkbox to acknowledge)")
-                    else:
-                        st.warning(f"⚠️ Low confidence: {label}")
-
+            fig = go.Figure(data=[
+                go.Candlestick(
+                    x=live_df.index,
+                    open=live_df['open'],
+                    high=live_df['high'],
+                    low=live_df['low'],
+                    close=live_df['close']
+                )
+            ])
+            fig.update_layout(title="Live SPY Chart", xaxis_title="Time", yaxis_title="Price")
+            chart_placeholder.plotly_chart(fig, use_container_width=True)
     except Exception as e:
-        st.error(f"Error fetching or predicting live data: {e}")
-
-    if auto_refresh == 0:
-        break
+        st.error(f"Chart update error: {e}")
     time.sleep(auto_refresh)
     st.rerun()
