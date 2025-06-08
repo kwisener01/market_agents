@@ -28,6 +28,8 @@ with open("rf_config.pkl", "rb") as f:
 
 CONF_THRESH = CONFIG["confidence_threshold"]
 
+API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
+
 # --- Live Data Fetching ---
 def fetch_live_data(symbol, interval="1min", source="twelve"):
     if source == "twelve":
