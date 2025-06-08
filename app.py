@@ -183,8 +183,10 @@ tab1, tab2 = st.tabs(["📉 AlphaVantage Chart", "📊 AlphaVantage Stats"])
 with tab1:
     alpha_df = fetch_alphavantage_data("SPY", interval="1min")
     if alpha_df is not None and not alpha_df.empty:
+        st.info(f"✅ AlphaVantage raw rows: {len(alpha_df)}")
         alpha_df = add_indicators(alpha_df)
         alpha_df = alpha_df.dropna()
+        st.info(f"📉 Rows after indicator calc: {len(alpha_df)}")
         if not alpha_df.empty:
             latest_row = alpha_df.iloc[[-1]]
             pred, conf, _ = predict(alpha_df)
@@ -204,9 +206,9 @@ with tab1:
             fig_hist.update_layout(title="AlphaVantage SPY 1-Min Historical Chart", xaxis_title="Time", yaxis_title="Price")
             st.plotly_chart(fig_hist, use_container_width=True)
         else:
-            st.warning("AlphaVantage indicator calculation returned no data.")
+            st.warning("⚠️ AlphaVantage indicator calculation returned no data. Consider reducing window size.")
     else:
-        st.warning("AlphaVantage data is not available or returned no rows.")
+        st.warning("⚠️ AlphaVantage data is not available or returned no rows.")
 
 with tab2:
     if alpha_df is not None and not alpha_df.empty:
