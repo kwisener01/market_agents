@@ -17,7 +17,7 @@ st.set_page_config(layout="wide")
 
 # --- Load RF model from Google Drive using gdown ---
 @st.cache_resource
-def load_model_from_drive(file_id, output_path="rf_model.pkl"):
+def load_model_from_drive(file_id, output_path="model.pkl"):
     url = f"https://drive.google.com/uc?id={file_id}"
     gdown.download(url, output_path, quiet=False)
     return joblib.load(output_path)
