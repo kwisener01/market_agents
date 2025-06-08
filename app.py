@@ -31,16 +31,24 @@ CONF_THRESH = CONFIG["confidence_threshold"]
 API_KEY = st.secrets["TWELVE_DATA"]["API_KEY"]
 
 # --- Live Data Fetching ---
-def fetch_live_data(symbol, interval="1min", source="twelve"):
-    if source == "twelve":
-        key = st.secrets["api"]["twelve_data_key"]
-        url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&apikey={key}&outputsize=1"
-        r = requests.get(url).json()
-        df = pd.DataFrame(r["values"])
-        df = df.rename(columns=str.lower).astype(float)
-        df["datetime"] = pd.to_datetime(r["values"][0]["datetime"])
-        df.set_index("datetime", inplace=True)
-        return df
+
+@st.cache_data(ttl=60)
+def fetch_data(symbol, interval):
+    url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&apikey={API_KEY}"
+    response = requests.get(url).json()
+    if 'values' not in response:
+        st.error(f"API Error: {response.get('message', 'Unknown')}")
+        return None
+    df = pd.DataFrame(response['values'])
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df = df.sort_values('datetime').set_index('datetime')
+    df.columns = [c.lower() for c in df.columns]
+    required_cols = ['open', 'high', 'low', 'close', 'volume']
+    if not all(col in df.columns for col in required_cols):
+        st.error(f"Missing required columns from Twelve Data: {set(required_cols) - set(df.columns)}")
+        return None
+    df[required_cols] = df[required_cols].astype(float)
+    return df
 
 # --- Feature Engineering (example placeholders) ---
 def add_indicators(df):
