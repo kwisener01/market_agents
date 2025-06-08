@@ -10,6 +10,7 @@ import gdown
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import time
+import io
 
 # --- Set page config FIRST ---
 st.set_page_config(layout="wide")
@@ -65,7 +66,7 @@ def fetch_alphavantage_data(symbol="SPY", interval="1min"):
     if response.status_code != 200:
         st.error("AlphaVantage API Error")
         return None
-    df = pd.read_csv(pd.compat.StringIO(response.text))
+    df = pd.read_csv(io.StringIO(response.text))
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df = df.rename(columns={"timestamp": "datetime"}).set_index("datetime")
     return df.sort_index()
@@ -107,8 +108,8 @@ def predict(df):
 st.title("📈 Real-Time SPY Buy/Sell/Hold Signals")
 st.markdown("Powered by Random Forest, Twelve Data & AlphaVantage")
 
-refresh_rate = st.selectbox("🔄 Auto-Refresh Rate:", ["Off", "60 sec", "90 sec"], index=2)
-interval_map = {"Off": 0, "60 sec": 60, "90 sec": 90}
+refresh_rate = st.selectbox("🔄 Auto-Refresh Rate:", ["Off", "60 sec", "2 min", "5 min"], index=1)
+interval_map = {"Off": 0, "60 sec": 60, "2 min": 120, "5 min": 300}
 auto_refresh = interval_map[refresh_rate]
 acknowledged = st.checkbox("✅ Acknowledge Signal Alert", value=False)
 
