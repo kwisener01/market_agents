@@ -8,6 +8,7 @@ import pytz
 import joblib
 import gdown
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 # --- Load RF model from Google Drive using gdown ---
 @st.cache_resource
@@ -83,10 +84,30 @@ st.title("📈 Real-Time SPY Buy/Sell/Hold Signals")
 st.markdown("Powered by Random Forest & Twelve Data")
 
 signal_history = []
+live_df = None
 
-if st.button("📡 Fetch Live Signal"):
+if st.button("📥 Fetch Live Data"):
     try:
         live_df = fetch_live_data("SPY", interval="1min")
+        if live_df is not None:
+            st.success("✅ Live data fetched.")
+            # Plot candle chart
+            fig = go.Figure(data=[
+                go.Candlestick(
+                    x=live_df.index,
+                    open=live_df['open'],
+                    high=live_df['high'],
+                    low=live_df['low'],
+                    close=live_df['close']
+                )
+            ])
+            fig.update_layout(title="Live SPY Candlestick Chart", xaxis_title="Time", yaxis_title="Price")
+            st.plotly_chart(fig)
+    except Exception as e:
+        st.error(f"Error fetching live data: {e}")
+
+if st.button("🤖 Run Model"):
+    try:
         if live_df is not None:
             signal, confidence, live_df = predict(live_df)
             label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
@@ -99,12 +120,17 @@ if st.button("📡 Fetch Live Signal"):
             else:
                 st.warning(f"⚠️ Low confidence: {label}")
 
-            # Append to signal history
-            signal_history.append({"Time": live_df.index[-1], "Signal": label, "Confidence": confidence})
+            if not live_df.empty:
+                signal_history.append({
+                    "Time": live_df.index[-1],
+                    "Signal": label,
+                    "Confidence": confidence
+                })
 
-            # Plot signal history
             if len(signal_history) > 1:
                 hist_df = pd.DataFrame(signal_history).set_index("Time")
                 st.line_chart(hist_df[["Confidence"]])
+        else:
+            st.warning("⚠️ Please fetch live data first.")
     except Exception as e:
         st.error(f"Error fetching or predicting live data: {e}")
