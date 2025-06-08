@@ -107,8 +107,8 @@ def predict(df):
 st.title("📈 Real-Time SPY Buy/Sell/Hold Signals")
 st.markdown("Powered by Random Forest, Twelve Data & AlphaVantage")
 
-refresh_rate = st.selectbox("🔄 Auto-Refresh Rate:", ["Off", "30 sec", "60 sec"], index=2)
-interval_map = {"Off": 0, "30 sec": 30, "60 sec": 60}
+refresh_rate = st.selectbox("🔄 Auto-Refresh Rate:", ["Off", "60 sec", "90 sec"], index=2)
+interval_map = {"Off": 0, "60 sec": 60, "90 sec": 90}
 auto_refresh = interval_map[refresh_rate]
 acknowledged = st.checkbox("✅ Acknowledge Signal Alert", value=False)
 
