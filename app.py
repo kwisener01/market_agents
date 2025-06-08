@@ -67,6 +67,8 @@ def add_indicators(df):
 # --- Prediction Logic ---
 def predict(df):
     df = add_indicators(df)
+    if df.shape[0] == 0:
+        raise ValueError("Not enough data after indicator calculation. Need at least 50 rows.")
     latest = df.iloc[[-1]]
     X_live = latest[FEATURES]
     prob = rf_model.predict_proba(X_live)
