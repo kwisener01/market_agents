@@ -122,3 +122,14 @@ def predict(df):
     confidence = np.max(prob)
     signal_map = {0: -1, 1: 0, 2: 1}
     return signal_map[pred], confidence, df
+
+# --- Quick AlphaVantage model test before market ---
+if st.sidebar.button("🧪 Test Model with AlphaVantage"):
+    try:
+        test_df = fetch_alphavantage_data("SPY", interval="1min")
+        if test_df is not None:
+            signal, confidence, _ = predict(test_df)
+            label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
+            st.sidebar.success(f"Model OK — {label} with {confidence:.2%} confidence")
+    except Exception as e:
+        st.sidebar.error(f"❌ Model test failed: {e}")
