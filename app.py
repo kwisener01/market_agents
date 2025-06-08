@@ -49,7 +49,7 @@ def fetch_live_data(symbol, interval):
         st.error(f"API Error: {response.get('message', 'Unknown')}")
         return None
     df = pd.DataFrame(response['values'])
-    df['datetime'] = pd.to_datetime(df['datetime'])
+    df['datetime'] = pd.to_datetime(df['datetime']).dt.tz_localize('UTC').dt.tz_convert('America/New_York')
     df = df.sort_values('datetime').set_index('datetime')
     df.columns = [c.lower() for c in df.columns]
     required_cols = ['open', 'high', 'low', 'close', 'volume']
@@ -67,7 +67,7 @@ def fetch_alphavantage_data(symbol="SPY", interval="1min"):
         st.error("AlphaVantage API Error")
         return None
     df = pd.read_csv(io.StringIO(response.text))
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_localize('UTC').dt.tz_convert('America/New_York')
     df = df.rename(columns={"timestamp": "datetime"}).set_index("datetime")
     return df.sort_index()
 
@@ -140,7 +140,7 @@ with col2:
                         st.warning(f"🚨 Signal Alert: {label} (Acknowledge below)")
 
                 st.session_state.signal_history.append({
-                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "time": datetime.now(pytz.timezone("America/New_York")).strftime("%H:%M:%S"),
                     "signal": label,
                     "confidence": confidence
                 })
@@ -180,6 +180,14 @@ tab1, tab2 = st.tabs(["📉 AlphaVantage Chart", "📊 AlphaVantage Stats"])
 with tab1:
     alpha_df = fetch_alphavantage_data("SPY", interval="1min")
     if alpha_df is not None:
+        alpha_df = add_indicators(alpha_df)
+        alpha_df = alpha_df.dropna()
+        latest_row = alpha_df.iloc[[-1]]
+        pred, conf, _ = predict(alpha_df)
+        signal_map = {-1: "SELL", 0: "HOLD", 1: "BUY"}
+        alpha_df["Signal"] = ""
+        alpha_df.loc[latest_row.index, "Signal"] = signal_map[pred]
+
         fig_hist = go.Figure(data=[
             go.Candlestick(
                 x=alpha_df.index,
@@ -196,3 +204,24 @@ with tab2:
     if alpha_df is not None:
         st.write("## Descriptive Statistics")
         st.dataframe(alpha_df.describe())
+
+        if "Signal" in alpha_df.columns:
+            signal_counts = alpha_df["Signal"].value_counts()
+            st.write("## Signal Distribution")
+            st.bar_chart(signal_counts)
+
+            # Model ROI Simulation
+            prices = alpha_df["close"].values
+            signals = alpha_df["Signal"].replace({"BUY": 1, "SELL": -1, "HOLD": 0}).values
+            initial_cash = 100000
+            pos, cash = 0, initial_cash
+            for i in range(len(signals)):
+                if signals[i] == 1 and pos == 0:
+                    pos = cash / prices[i]
+                    cash = 0
+                elif signals[i] == -1 and pos > 0:
+                    cash = pos * prices[i]
+                    pos = 0
+            final_equity = cash + pos * prices[-1]
+            roi = (final_equity - initial_cash) / initial_cash * 100
+            st.metric("Backtest ROI", f"{roi:.2f}%")
