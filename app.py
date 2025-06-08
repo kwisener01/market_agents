@@ -125,3 +125,44 @@ with st.expander("📉 AlphaVantage Candlestick Chart"):
         st.plotly_chart(fig_alpha, use_container_width=True)
     else:
         st.warning("No AlphaVantage data available.")
+
+# --- Live Signal Section ---
+st.header("📡 Real-Time Signal")
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    df_live = fetch_live_data("SPY", interval="1min")
+    if df_live is not None:
+        fig = go.Figure(data=[
+            go.Candlestick(
+                x=df_live.index,
+                open=df_live["open"],
+                high=df_live["high"],
+                low=df_live["low"],
+                close=df_live["close"],
+                name="Live"
+            )
+        ])
+        fig.update_layout(title="Live SPY Chart (Twelve Data)", xaxis_title="Time", yaxis_title="Price")
+        st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    if st.button("Run Model"):
+        try:
+            signal, confidence, full_df = predict(df_live)
+            signal_label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
+            st.metric("Signal", signal_label)
+            st.metric("Confidence", f"{confidence:.2%}")
+
+            # Save history
+            now = datetime.now(pytz.timezone("America/New_York")).strftime("%Y-%m-%d %H:%M")
+            st.session_state.signal_history.append({"time": now, "signal": signal_label, "confidence": confidence})
+
+        except Exception as e:
+            st.error(f"Error running model: {e}")
+
+# --- Signal History ---
+if st.session_state.signal_history:
+    st.subheader("📜 Signal History")
+    hist_df = pd.DataFrame(st.session_state.signal_history)
+    st.dataframe(hist_df, use_container_width=True)
