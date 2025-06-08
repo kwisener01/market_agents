@@ -182,23 +182,24 @@ with tab1:
     if alpha_df is not None:
         alpha_df = add_indicators(alpha_df)
         alpha_df = alpha_df.dropna()
-        latest_row = alpha_df.iloc[[-1]]
-        pred, conf, _ = predict(alpha_df)
-        signal_map = {-1: "SELL", 0: "HOLD", 1: "BUY"}
-        alpha_df["Signal"] = ""
-        alpha_df.loc[latest_row.index, "Signal"] = signal_map[pred]
+        if not alpha_df.empty:
+            latest_row = alpha_df.iloc[[-1]]
+            pred, conf, _ = predict(alpha_df)
+            signal_map = {-1: "SELL", 0: "HOLD", 1: "BUY"}
+            alpha_df["Signal"] = ""
+            alpha_df.loc[latest_row.index, "Signal"] = signal_map[pred]
 
-        fig_hist = go.Figure(data=[
-            go.Candlestick(
-                x=alpha_df.index,
-                open=alpha_df['open'],
-                high=alpha_df['high'],
-                low=alpha_df['low'],
-                close=alpha_df['close']
-            )
-        ])
-        fig_hist.update_layout(title="AlphaVantage SPY 1-Min Historical Chart", xaxis_title="Time", yaxis_title="Price")
-        st.plotly_chart(fig_hist, use_container_width=True)
+            fig_hist = go.Figure(data=[
+                go.Candlestick(
+                    x=alpha_df.index,
+                    open=alpha_df['open'],
+                    high=alpha_df['high'],
+                    low=alpha_df['low'],
+                    close=alpha_df['close']
+                )
+            ])
+            fig_hist.update_layout(title="AlphaVantage SPY 1-Min Historical Chart", xaxis_title="Time", yaxis_title="Price")
+            st.plotly_chart(fig_hist, use_container_width=True)
 
 with tab2:
     if alpha_df is not None:
