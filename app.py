@@ -9,8 +9,17 @@ import pytz
 
 #1ntpn9nsBHZ_jawfi7t_DiDGswIPhf_Dm
 # --- Load Model + Config ---
-with open("rf_model.pkl", "rb") as f:
-    model = pickle.load(f)
+# --- Load RF model from Google Drive using gdown ---
+@st.cache_resource
+def load_model_from_drive(file_id, output_path="rf_model.pkl"):
+    url = f"https://drive.google.com/uc?id={file_id}"
+    gdown.download(url, output_path, quiet=False)
+    return joblib.load(output_path)
+# Replace with your actual file ID
+model_file_id = "1ntpn9nsBHZ_jawfi7t_DiDGswIPhf_Dm"
+rf_model = load_model_from_drive(model_file_id)
+
+
 with open("rf_features.pkl", "rb") as f:
     FEATURES = pickle.load(f)
 with open("rf_config.pkl", "rb") as f:
