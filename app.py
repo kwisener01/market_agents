@@ -67,6 +67,9 @@ def fetch_alphavantage_data(symbol="SPY", interval="1min"):
         st.error("AlphaVantage API Error")
         return None
     df = pd.read_csv(io.StringIO(response.text))
+    if df.empty:
+        st.warning("AlphaVantage returned no data.")
+        return None
     df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_localize('UTC').dt.tz_convert('America/New_York')
     df = df.rename(columns={"timestamp": "datetime"}).set_index("datetime")
     return df.sort_index()
@@ -179,7 +182,7 @@ tab1, tab2 = st.tabs(["📉 AlphaVantage Chart", "📊 AlphaVantage Stats"])
 
 with tab1:
     alpha_df = fetch_alphavantage_data("SPY", interval="1min")
-    if alpha_df is not None:
+    if alpha_df is not None and not alpha_df.empty:
         alpha_df = add_indicators(alpha_df)
         alpha_df = alpha_df.dropna()
         if not alpha_df.empty:
@@ -200,9 +203,13 @@ with tab1:
             ])
             fig_hist.update_layout(title="AlphaVantage SPY 1-Min Historical Chart", xaxis_title="Time", yaxis_title="Price")
             st.plotly_chart(fig_hist, use_container_width=True)
+        else:
+            st.warning("AlphaVantage indicator calculation returned no data.")
+    else:
+        st.warning("AlphaVantage data is not available or returned no rows.")
 
 with tab2:
-    if alpha_df is not None:
+    if alpha_df is not None and not alpha_df.empty:
         st.write("## Descriptive Statistics")
         st.dataframe(alpha_df.describe())
 
@@ -226,3 +233,5 @@ with tab2:
             final_equity = cash + pos * prices[-1]
             roi = (final_equity - initial_cash) / initial_cash * 100
             st.metric("Backtest ROI", f"{roi:.2f}%")
+    else:
+        st.warning("No statistics available: AlphaVantage data not loaded.")
