@@ -17,7 +17,7 @@ st.set_page_config(layout="wide")
 
 # --- Load RF model from Google Drive using gdown ---
 @st.cache_resource
-def load_model_from_drive(file_id, output_path="model.pkl"):
+def load_model_from_drive(file_id, output_path="rf_model.pkl"):
     url = f"https://drive.google.com/uc?id={file_id}"
     gdown.download(url, output_path, quiet=False)
     return joblib.load(output_path)
@@ -81,6 +81,9 @@ def fetch_alphavantage_data(symbol="SPY", interval="1min"):
     df = pd.read_csv(io.StringIO(response.text))
     if df.empty:
         st.warning("AlphaVantage returned no data.")
+        return None
+    if "timestamp" not in df.columns:
+        st.warning("Missing 'timestamp' column in AlphaVantage data.")
         return None
     df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_localize('UTC').dt.tz_convert('America/New_York')
     df = df.rename(columns={"timestamp": "datetime"}).set_index("datetime")
@@ -149,6 +152,17 @@ if live_data is not None:
         )
     ])
     st.plotly_chart(fig, use_container_width=True)
+    latest_price = live_data['close'].iloc[-1]
+    st.metric("Current Price", f"${latest_price:.2f}")
+
+    # Bayesian forecast (simple example)
+    st.subheader("🔮 Bayesian Forecast (Mean + 95% CI)")
+    prices = live_data['close'].values
+    mean_price = np.mean(prices)
+    std_dev = np.std(prices)
+    ci_upper = mean_price + 1.96 * std_dev
+    ci_lower = mean_price - 1.96 * std_dev
+    st.write(f"Mean: ${mean_price:.2f} | 95% CI: [{ci_lower:.2f}, {ci_upper:.2f}]")
 
 # --- Run Model ---
 if st.button("▶️ Run Model"):
