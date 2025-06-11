@@ -84,6 +84,8 @@ def fetch_alphavantage_data(symbol="SPY", interval="1min"):
         return None
     if "timestamp" not in df.columns:
         st.warning("Missing 'timestamp' column in AlphaVantage data.")
+        st.text("Raw AlphaVantage response (preview):")
+        st.code(response.text[:500])
         return None
     df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_localize('UTC').dt.tz_convert('America/New_York')
     df = df.rename(columns={"timestamp": "datetime"}).set_index("datetime")
