@@ -106,7 +106,7 @@ def add_indicators(df):
     df["MA_9"] = df["close"].rolling(6).mean()
     df["MA_21"] = df["close"].rolling(12).mean()
     df["MA_50"] = df["close"].rolling(20).mean()
-    return df.dropna()
+    return df.dropna(subset=FEATURES)
 
 # --- Prediction Logic ---
 def predict(df):
