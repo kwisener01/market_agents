@@ -106,6 +106,11 @@ def add_indicators(df):
     df["MA_9"] = df["close"].rolling(6).mean()
     df["MA_21"] = df["close"].rolling(12).mean()
     df["MA_50"] = df["close"].rolling(20).mean()
+
+    missing_cols = [col for col in FEATURES if col not in df.columns]
+    if missing_cols:
+        raise ValueError(f"Missing columns required by model: {missing_cols}")
+
     return df.dropna(subset=FEATURES)
 
 # --- Prediction Logic ---
