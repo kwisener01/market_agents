@@ -78,14 +78,14 @@ def fetch_alphavantage_data(symbol="SPY", interval="1min"):
     if response.status_code != 200:
         st.error("AlphaVantage API Error")
         return None
-    df = pd.read_csv(io.StringIO(response.text))
-    if df.empty:
-        st.warning("AlphaVantage returned no data.")
-        return None
-    if "timestamp" not in df.columns:
+    if not response.text or not response.text.startswith("timestamp"):
         st.warning("Missing 'timestamp' column in AlphaVantage data.")
         st.text("Raw AlphaVantage response (preview):")
         st.code(response.text[:500])
+        return None
+    df = pd.read_csv(io.StringIO(response.text))
+    if df.empty:
+        st.warning("AlphaVantage returned no data.")
         return None
     df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_localize('UTC').dt.tz_convert('America/New_York')
     df = df.rename(columns={"timestamp": "datetime"}).set_index("datetime")
