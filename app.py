@@ -52,6 +52,37 @@ refresh_options = {
 refresh_choice = st.selectbox("🔄 Auto-refresh interval:", list(refresh_options.keys()), index=0)
 refresh_interval = refresh_options[refresh_choice]
 
+# --- Column name standardization function ---
+def standardize_columns(df):
+    """Standardize column names to match model expectations"""
+    # Create a mapping for common column name variations
+    column_mapping = {
+        'open': 'Open',
+        'high': 'High', 
+        'low': 'Low',
+        'close': 'Close',
+        'volume': 'Volume',
+        'Open': 'Open',
+        'High': 'High',
+        'Low': 'Low', 
+        'Close': 'Close',
+        'Volume': 'Volume'
+    }
+    
+    # Rename columns based on mapping
+    df_renamed = df.rename(columns=column_mapping)
+    
+    # Ensure we have the required columns
+    required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+    missing_cols = [col for col in required_cols if col not in df_renamed.columns]
+    
+    if missing_cols:
+        st.error(f"Missing required columns after standardization: {missing_cols}")
+        st.write("Available columns:", list(df_renamed.columns))
+        return None
+        
+    return df_renamed
+
 # --- Live Data Fetching ---
 @st.cache_data(ttl=60)
 def fetch_live_data(symbol, interval):
@@ -63,12 +94,15 @@ def fetch_live_data(symbol, interval):
     df = pd.DataFrame(response['values'])
     df['datetime'] = pd.to_datetime(df['datetime']).dt.tz_localize('UTC').dt.tz_convert('America/New_York')
     df = df.sort_values('datetime').set_index('datetime')
-    df.columns = [c.lower() for c in df.columns]
-    required_cols = ['open', 'high', 'low', 'close', 'volume']
-    if not all(col in df.columns for col in required_cols):
-        st.error(f"Missing required columns from Twelve Data: {set(required_cols) - set(df.columns)}")
+    
+    # Standardize column names
+    df = standardize_columns(df)
+    if df is None:
         return None
-    df[required_cols] = df[required_cols].astype(float)
+        
+    # Convert to float
+    numeric_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+    df[numeric_cols] = df[numeric_cols].astype(float)
     return df
 
 @st.cache_data(ttl=300)
@@ -89,11 +123,16 @@ def fetch_alphavantage_data(symbol="SPY", interval="1min"):
         return None
     df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_localize('UTC').dt.tz_convert('America/New_York')
     df = df.rename(columns={"timestamp": "datetime"}).set_index("datetime")
-    return df.sort_index()
+    df = df.sort_index()
+    
+    # Standardize column names for AlphaVantage
+    df = standardize_columns(df)
+    return df
 
 # --- Feature Engineering ---
 def add_indicators(df):
-    delta = df["close"].diff()
+    # Use Close column for calculations
+    delta = df["Close"].diff()
     gain = np.where(delta > 0, delta, 0)
     loss = np.where(delta < 0, -delta, 0)
     avg_gain = pd.Series(gain).rolling(window=6).mean()
@@ -101,14 +140,18 @@ def add_indicators(df):
     rs = avg_gain / (avg_loss + 1e-10)
     df["RSI"] = 100 - (100 / (1 + rs))
 
-    df["MACD"] = df["close"].ewm(span=12).mean() - df["close"].ewm(span=26).mean()
+    df["MACD"] = df["Close"].ewm(span=12).mean() - df["Close"].ewm(span=26).mean()
     df["MACD_Signal"] = df["MACD"].ewm(span=9).mean()
-    df["MA_9"] = df["close"].rolling(6).mean()
-    df["MA_21"] = df["close"].rolling(12).mean()
-    df["MA_50"] = df["close"].rolling(20).mean()
+    df["MA_9"] = df["Close"].rolling(6).mean()
+    df["MA_21"] = df["Close"].rolling(12).mean()
+    df["MA_50"] = df["Close"].rolling(20).mean()
 
+    # Check which features are actually needed by the model
     missing_cols = [col for col in FEATURES if col not in df.columns]
     if missing_cols:
+        st.warning(f"Missing columns required by model: {missing_cols}")
+        st.write("Available columns:", list(df.columns))
+        st.write("Required features:", FEATURES)
         raise ValueError(f"Missing columns required by model: {missing_cols}")
 
     return df.dropna(subset=FEATURES)
@@ -133,11 +176,17 @@ def predict(df):
     signal_map = {0: -1, 1: 0, 2: 1}
     return signal_map[pred], confidence, df
 
+# --- Debug Info ---
+st.sidebar.header("🔧 Debug Info")
+st.sidebar.write("Required Features:")
+st.sidebar.write(FEATURES)
+
 # --- Quick AlphaVantage model test before market ---
 if st.sidebar.button("🧪 Test Model with AlphaVantage"):
     try:
         test_df = fetch_alphavantage_data("SPY", interval="1min")
         if test_df is not None:
+            st.sidebar.write("AlphaVantage columns:", list(test_df.columns))
             signal, confidence, _ = predict(test_df)
             label = {1: "🟢 BUY", 0: "⚪ HOLD", -1: "🔴 SELL"}[signal]
             st.sidebar.success(f"Model OK — {label} with {confidence:.2%} confidence")
@@ -149,22 +198,23 @@ st.header("📡 Real-Time Signal")
 st.subheader("Live SPY Chart (Twelve Data)")
 live_data = fetch_live_data("SPY", interval="1min")
 if live_data is not None:
+    st.write("Live data columns:", list(live_data.columns))
     fig = go.Figure(data=[
         go.Candlestick(
             x=live_data.index,
-            open=live_data['open'],
-            high=live_data['high'],
-            low=live_data['low'],
-            close=live_data['close']
+            open=live_data['Open'],
+            high=live_data['High'],
+            low=live_data['Low'],
+            close=live_data['Close']
         )
     ])
     st.plotly_chart(fig, use_container_width=True)
-    latest_price = live_data['close'].iloc[-1]
+    latest_price = live_data['Close'].iloc[-1]
     st.metric("Current Price", f"${latest_price:.2f}")
 
     # Bayesian forecast (simple example)
     st.subheader("🔮 Bayesian Forecast (Mean + 95% CI)")
-    prices = live_data['close'].values
+    prices = live_data['Close'].values
     mean_price = np.mean(prices)
     std_dev = np.std(prices)
     ci_upper = mean_price + 1.96 * std_dev
