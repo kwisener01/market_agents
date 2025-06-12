@@ -86,7 +86,8 @@ def standardize_columns(df):
 # --- Live Data Fetching ---
 @st.cache_data(ttl=60)
 def fetch_live_data(symbol, interval):
-    url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize=full&apikey={API_KEY}"
+    # TwelveData uses 'outputsize' parameter differently - use a number for more data
+    url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize=5000&apikey={API_KEY}"
     response = requests.get(url).json()
     if 'values' not in response:
         st.error(f"API Error: {response.get('message', 'Unknown')}")
@@ -142,10 +143,10 @@ def add_indicators(df):
     
     # Adjust window sizes based on available data
     data_len = len(df)
-    rsi_window = min(6, max(2, data_len // 5))  # Adaptive RSI window
-    ma_short = min(6, max(2, data_len // 5))    # Adaptive short MA
-    ma_med = min(12, max(3, data_len // 3))     # Adaptive medium MA
-    ma_long = min(20, max(4, data_len // 2))    # Adaptive long MA
+    rsi_window = min(14, max(2, data_len // 10))  # Standard RSI is 14, but adaptive
+    ma_short = min(9, max(2, data_len // 20))     # Target MA_9
+    ma_med = min(21, max(3, data_len // 10))      # Target MA_21  
+    ma_long = min(50, max(4, data_len // 5))      # Target MA_50
     
     st.info(f"Using adaptive windows: RSI={rsi_window}, MA_short={ma_short}, MA_med={ma_med}, MA_long={ma_long}")
     
@@ -156,9 +157,9 @@ def add_indicators(df):
     df["RSI"] = 100 - (100 / (1 + rs))
 
     # MACD with adaptive spans
-    ema_fast = min(12, max(3, data_len // 3))
-    ema_slow = min(26, max(5, data_len // 2))
-    signal_span = min(9, max(2, data_len // 4))
+    ema_fast = min(12, max(3, data_len // 20))
+    ema_slow = min(26, max(5, data_len // 10))
+    signal_span = min(9, max(2, data_len // 20))
     
     df["MACD"] = df["Close"].ewm(span=ema_fast, min_periods=1).mean() - df["Close"].ewm(span=ema_slow, min_periods=1).mean()
     df["MACD_Signal"] = df["MACD"].ewm(span=signal_span, min_periods=1).mean()
@@ -176,21 +177,53 @@ def add_indicators(df):
         st.write("Required features:", FEATURES)
         raise ValueError(f"Missing columns required by model: {missing_cols}")
 
-    # Check for NaN values in required features
+    # Debug: Check data types and ranges
+    st.write("Feature data types and sample values:")
+    for col in FEATURES:
+        if col in df.columns:
+            st.write(f"{col}: {df[col].dtype}, sample: {df[col].iloc[-5:].values}")
+    
+    # Check for NaN values in required features before dropping
     nan_counts = df[FEATURES].isna().sum()
     if nan_counts.sum() > 0:
         st.warning("NaN values found in features:")
         st.write(nan_counts[nan_counts > 0])
         
-        # Fill remaining NaN values with forward fill then backward fill
-        df[FEATURES] = df[FEATURES].fillna(method='ffill').fillna(method='bfill')
-        
-        # If still NaN, fill with column means
+        # More aggressive NaN handling
         for col in FEATURES:
             if df[col].isna().any():
-                df[col] = df[col].fillna(df[col].mean())
-
-    return df.dropna(subset=FEATURES)
+                # First try forward fill
+                df[col] = df[col].fillna(method='ffill')
+                # Then backward fill for any remaining
+                df[col] = df[col].fillna(method='bfill')
+                # If still NaN, use median (more robust than mean)
+                if df[col].isna().any():
+                    median_val = df[col].median()
+                    if pd.isna(median_val):
+                        # If median is also NaN, use a reasonable default
+                        if col in ['Open', 'High', 'Low', 'Close']:
+                            df[col] = df[col].fillna(df[['Open', 'High', 'Low', 'Close']].median().median())
+                        elif col == 'Volume':
+                            df[col] = df[col].fillna(df['Volume'].mean() if df['Volume'].mean() > 0 else 1000000)
+                        elif col == 'RSI':
+                            df[col] = df[col].fillna(50)  # Neutral RSI
+                        else:
+                            df[col] = df[col].fillna(0)
+                    else:
+                        df[col] = df[col].fillna(median_val)
+    
+    # Final check for infinite values
+    for col in FEATURES:
+        if np.isinf(df[col]).any():
+            st.warning(f"Infinite values found in {col}, replacing with median")
+            median_val = df[col][~np.isinf(df[col])].median()
+            df[col] = df[col].replace([np.inf, -np.inf], median_val)
+    
+    # Final NaN check
+    final_df = df.dropna(subset=FEATURES)
+    st.info(f"After processing: {len(df)} -> {len(final_df)} rows")
+    
+    return final_df
 
 # --- Prediction Logic ---
 def predict(df):
