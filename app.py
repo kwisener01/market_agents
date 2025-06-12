@@ -86,7 +86,7 @@ def standardize_columns(df):
 # --- Live Data Fetching ---
 @st.cache_data(ttl=60)
 def fetch_live_data(symbol, interval):
-    url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&apikey={API_KEY}"
+    url = f"https://api.twelvedata.com/time_series?symbol={symbol}&interval={interval}&outputsize=full&apikey={API_KEY}"
     response = requests.get(url).json()
     if 'values' not in response:
         st.error(f"API Error: {response.get('message', 'Unknown')}")
@@ -103,6 +103,8 @@ def fetch_live_data(symbol, interval):
     # Convert to float
     numeric_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
     df[numeric_cols] = df[numeric_cols].astype(float)
+    
+    st.info(f"Fetched {len(df)} rows of data for {symbol}")
     return df
 
 @st.cache_data(ttl=300)
@@ -127,6 +129,8 @@ def fetch_alphavantage_data(symbol="SPY", interval="1min"):
     
     # Standardize column names for AlphaVantage
     df = standardize_columns(df)
+    
+    st.info(f"AlphaVantage fetched {len(df)} rows")
     return df
 
 # --- Feature Engineering ---
@@ -135,16 +139,34 @@ def add_indicators(df):
     delta = df["Close"].diff()
     gain = np.where(delta > 0, delta, 0)
     loss = np.where(delta < 0, -delta, 0)
-    avg_gain = pd.Series(gain).rolling(window=6).mean()
-    avg_loss = pd.Series(loss).rolling(window=6).mean()
+    
+    # Adjust window sizes based on available data
+    data_len = len(df)
+    rsi_window = min(6, max(2, data_len // 5))  # Adaptive RSI window
+    ma_short = min(6, max(2, data_len // 5))    # Adaptive short MA
+    ma_med = min(12, max(3, data_len // 3))     # Adaptive medium MA
+    ma_long = min(20, max(4, data_len // 2))    # Adaptive long MA
+    
+    st.info(f"Using adaptive windows: RSI={rsi_window}, MA_short={ma_short}, MA_med={ma_med}, MA_long={ma_long}")
+    
+    # RSI calculation with adaptive window
+    avg_gain = pd.Series(gain).rolling(window=rsi_window, min_periods=1).mean()
+    avg_loss = pd.Series(loss).rolling(window=rsi_window, min_periods=1).mean()
     rs = avg_gain / (avg_loss + 1e-10)
     df["RSI"] = 100 - (100 / (1 + rs))
 
-    df["MACD"] = df["Close"].ewm(span=12).mean() - df["Close"].ewm(span=26).mean()
-    df["MACD_Signal"] = df["MACD"].ewm(span=9).mean()
-    df["MA_9"] = df["Close"].rolling(6).mean()
-    df["MA_21"] = df["Close"].rolling(12).mean()
-    df["MA_50"] = df["Close"].rolling(20).mean()
+    # MACD with adaptive spans
+    ema_fast = min(12, max(3, data_len // 3))
+    ema_slow = min(26, max(5, data_len // 2))
+    signal_span = min(9, max(2, data_len // 4))
+    
+    df["MACD"] = df["Close"].ewm(span=ema_fast, min_periods=1).mean() - df["Close"].ewm(span=ema_slow, min_periods=1).mean()
+    df["MACD_Signal"] = df["MACD"].ewm(span=signal_span, min_periods=1).mean()
+    
+    # Moving averages with adaptive windows and min_periods
+    df["MA_9"] = df["Close"].rolling(ma_short, min_periods=1).mean()
+    df["MA_21"] = df["Close"].rolling(ma_med, min_periods=1).mean()
+    df["MA_50"] = df["Close"].rolling(ma_long, min_periods=1).mean()
 
     # Check which features are actually needed by the model
     missing_cols = [col for col in FEATURES if col not in df.columns]
@@ -154,6 +176,20 @@ def add_indicators(df):
         st.write("Required features:", FEATURES)
         raise ValueError(f"Missing columns required by model: {missing_cols}")
 
+    # Check for NaN values in required features
+    nan_counts = df[FEATURES].isna().sum()
+    if nan_counts.sum() > 0:
+        st.warning("NaN values found in features:")
+        st.write(nan_counts[nan_counts > 0])
+        
+        # Fill remaining NaN values with forward fill then backward fill
+        df[FEATURES] = df[FEATURES].fillna(method='ffill').fillna(method='bfill')
+        
+        # If still NaN, fill with column means
+        for col in FEATURES:
+            if df[col].isna().any():
+                df[col] = df[col].fillna(df[col].mean())
+
     return df.dropna(subset=FEATURES)
 
 # --- Prediction Logic ---
@@ -161,15 +197,22 @@ def predict(df):
     raw_rows = df.shape[0]
     df = add_indicators(df)
     available_rows = df.shape[0]
-    st.info(f"📊 Raw rows: {raw_rows}, Rows after indicators: {available_rows}, Required: 50")
+    st.info(f"📊 Raw rows: {raw_rows}, Rows after indicators: {available_rows}")
 
     if available_rows == 0:
         raise ValueError("No valid rows after indicator calculation.")
-    elif available_rows < 50:
-        raise ValueError(f"Not enough data after indicator calculation. Got {available_rows}, need at least 50 rows.")
-
+    elif available_rows < 10:  # Reduced minimum requirement
+        st.warning(f"Limited data available. Got {available_rows} rows. Predictions may be less reliable.")
+    
+    # Use the most recent available data
     latest = df.iloc[[-1]]
     X_live = latest[FEATURES]
+    
+    # Debug: Show the feature values
+    st.write("Feature values for latest prediction:")
+    feature_dict = {feature: X_live[feature].iloc[0] for feature in FEATURES}
+    st.write(feature_dict)
+    
     prob = rf_model.predict_proba(X_live)
     pred = np.argmax(prob)
     confidence = np.max(prob)
